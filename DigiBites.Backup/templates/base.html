@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block page_title %}DigiBites{% endblock %} — DigiBites POS</title>
+  <meta name="description" content="DigiBites — School Canteen POS & Ordering System">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2.0">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="layout" id="app-layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- Brand -->
+    <div class="sidebar-brand">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="DigiBites Logo" class="brand-logo-img">
+      <div>
+        <div class="brand-name">DigiBites</div>
+        <div class="brand-sub">Canteen POS System</div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar-nav" id="sidebar-nav">
+      {% if user.role == 'admin' %}
+        <div class="nav-section-label">Admin Panel</div>
+        <a href="{{ url_for('pages.admin_dashboard') }}"  class="nav-link {% if request.endpoint == 'pages.admin_dashboard' %}active{% endif %}">
+          <i class="fa-solid fa-gauge-high"></i> Dashboard
+        </a>
+        <a href="{{ url_for('pages.admin_pos') }}"       class="nav-link {% if request.endpoint == 'pages.admin_pos' %}active{% endif %}">
+          <i class="fa-solid fa-cash-register"></i> POS Terminal
+        </a>
+        <a href="{{ url_for('pages.admin_orders') }}"    class="nav-link {% if request.endpoint == 'pages.admin_orders' %}active{% endif %}">
+          <i class="fa-solid fa-list-check"></i> Orders Queue
+        </a>
+        <a href="{{ url_for('pages.admin_inventory') }}" class="nav-link {% if request.endpoint == 'pages.admin_inventory' %}active{% endif %}">
+          <i class="fa-solid fa-box-open"></i> Inventory
+        </a>
+        <a href="{{ url_for('pages.admin_student_verifications') }}" class="nav-link {% if request.endpoint == 'pages.admin_student_verifications' %}active{% endif %}">
+          <i class="fa-solid fa-id-card"></i> Student Verification
+        </a>
+        <a href="{{ url_for('pages.admin_users') }}" class="nav-link {% if request.endpoint == 'pages.admin_users' %}active{% endif %}">
+          <i class="fa-solid fa-users-gear"></i> User Management
+        </a>
+      {% else %}
+        <div class="nav-section-label">Menu</div>
+        <a href="{{ url_for('pages.customer_dashboard') }}" class="nav-link {% if request.endpoint == 'pages.customer_dashboard' %}active{% endif %}">
+          <i class="fa-solid fa-house"></i> Dashboard
+        </a>
+        <a href="{{ url_for('pages.customer_menu') }}"      class="nav-link {% if request.endpoint == 'pages.customer_menu' %}active{% endif %}">
+          <i class="fa-solid fa-utensils"></i> Browse Menu
+        </a>
+        <a href="{{ url_for('pages.customer_cart') }}"      class="nav-link {% if request.endpoint == 'pages.customer_cart' %}active{% endif %}">
+          <i class="fa-solid fa-cart-shopping"></i> My Cart
+          <span class="badge badge-green" id="sidebar-cart-count" style="margin-left:auto; display:none"></span>
+        </a>
+        <a href="{{ url_for('pages.customer_orders') }}"    class="nav-link {% if request.endpoint == 'pages.customer_orders' %}active{% endif %}">
+          <i class="fa-solid fa-clock-rotate-left"></i> My Orders
+        </a>
+      {% endif %}
+    </nav>
+
+    <!-- Footer user card -->
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="sb-avatar">{{ user.full_name[0]|upper }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ user.full_name }}</div>
+          <div class="user-role">{{ user.role|title }}</div>
+        </div>
+      </div>
+      <button class="btn-logout" id="btn-logout" onclick="handleLogout()">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign Out
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- Overlay (mobile) -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ── Main Area ────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <button class="topbar-menu-btn" id="menu-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="topbar-title">{% block topbar_title %}DigiBites{% endblock %}</div>
+      <div class="topbar-right">
+        {% if user.role == 'customer' %}
+        <a href="{{ url_for('pages.customer_cart') }}" class="cart-badge-wrap" id="topbar-cart-wrap" style="display:none" aria-label="Cart">
+          <i class="fa-solid fa-cart-shopping" style="color:var(--text-2); font-size:1.1rem"></i>
+          <span class="cart-dot" id="topbar-cart-count">0</span>
+        </a>
+        {% endif %}
+        <div class="topbar-badge">
+          <div class="avatar">{{ user.full_name[0]|upper }}</div>
+          <span>{{ user.full_name.split()[0] }}</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page Content Slot -->
+    <main class="page-content" id="page-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div><!-- /main -->
+
+</div><!-- /layout -->
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/allergen-guidance.js') }}?v=1.0"></script>
+
+<!-- ── Shared Scripts ──────────────────────────────────────── -->
+<script>
+  // ─ Sidebar toggle ─────────────────────────────────────
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const layout = document.getElementById('app-layout');
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      const isOpen = sidebar.classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('show', isOpen);
+    } else {
+      layout.classList.toggle('sidebar-collapsed');
+    }
+    syncSidebarButton();
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('show');
+    syncSidebarButton();
+  }
+  function syncSidebarButton() {
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    const isExpanded = isMobile
+      ? document.getElementById('sidebar').classList.contains('open')
+      : !document.getElementById('app-layout').classList.contains('sidebar-collapsed');
+    document.getElementById('menu-btn').setAttribute('aria-expanded', String(isExpanded));
+  }
+  syncSidebarButton();
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 767) closeSidebar();
+    else {
+      document.getElementById('app-layout').classList.remove('sidebar-collapsed');
+      syncSidebarButton();
+    }
+  });
+
+  // ─ Toast notifications ────────────────────────────────
+  function toast(msg, type = 'success', dur = 3500) {
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation' };
+    const el    = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `<i class="fa-solid ${icons[type] || icons.success}"></i><span>${msg}</span>`;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), dur);
+  }
+
+  // ─ API helper ─────────────────────────────────────────
+  async function api(url, opts = {}) {
+    const defaults = {
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+    };
+    const res = await fetch(url, { ...defaults, ...opts, headers: { ...defaults.headers, ...(opts.headers || {}) } });
+    return res.json();
+  }
+
+  // ─ Logout ─────────────────────────────────────────────
+  async function handleLogout() {
+    const btn = document.getElementById('btn-logout');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing out…';
+    const data = await api('/api/auth/logout', { method: 'POST' });
+    if (data.success) window.location.href = data.redirect || '/login';
+  }
+
+  // ─ Cart badge helpers (customer only) ─────────────────
+  function getCart()      { return JSON.parse(localStorage.getItem('digibites_cart') || '[]'); }
+  function setCart(cart)  { localStorage.setItem('digibites_cart', JSON.stringify(cart)); }
+  function getCartCount() { return getCart().reduce((s, i) => s + (i.qty || 1), 0); }
+  function updateCartBadge() {
+    const n = getCartCount();
+    const topWrap   = document.getElementById('topbar-cart-wrap');
+    const topCount  = document.getElementById('topbar-cart-count');
+    const sbCount   = document.getElementById('sidebar-cart-count');
+    if (topWrap) topWrap.style.display = n > 0 ? 'flex' : 'none';
+    if (topCount) topCount.textContent = n;
+    if (sbCount) {
+      sbCount.textContent = n;
+      sbCount.style.display = n > 0 ? 'inline-flex' : 'none';
+    }
+  }
+  updateCartBadge();
+
+  // ─ Currency formatter ──────────────────────────────────
+  function peso(amount) { return '₱' + Number(amount).toFixed(2); }
+</script>
+
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

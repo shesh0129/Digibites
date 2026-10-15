@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+{% block page_title %}Admin Dashboard{% endblock %}
+{% block topbar_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="dash-hero section-gap" style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <h2>Welcome, {{ user.full_name.split()[0] }}! 👋</h2>
+    <p>Daily canteen profit summary, live queue metrics, and tomorrow's kitchen prep list.</p>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <button class="btn btn-secondary btn-sm" onclick="openPrintableReportModal()" style="background:#ffffff; font-weight:700;">
+      <i class="fa-solid fa-print" style="color:var(--swatch-caramel)"></i> Print Daily Report
+    </button>
+    <button class="btn btn-secondary btn-sm" id="btn-reset-income" onclick="openResetIncomeModal()"
+            style="background:#fff1f2; border-color:#fca5a5; color:#dc2626; font-weight:700;" title="Archive and reset today's income counter">
+      <i class="fa-solid fa-arrow-rotate-left"></i> Reset Daily Income
+    </button>
+    <a href="{{ url_for('pages.admin_pos') }}" class="btn btn-primary btn-sm" style="font-weight:700;">
+      <i class="fa-solid fa-cash-register"></i> Open POS
+    </a>
+  </div>
+</div>
+
+<!-- ── Daily Performance & Profit Report ───────────────────── -->
+<div class="daily-report-card section-gap">
+  <div class="daily-report-header">
+    <div class="daily-report-title">
+      <div style="width:38px; height:38px; border-radius:10px; background:var(--swatch-cream); border:1.5px solid var(--swatch-caramel); display:flex; align-items:center; justify-content:center; color:var(--swatch-caramel); font-size:1.15rem;">
+        <i class="fa-solid fa-chart-line"></i>
+      </div>
+      <div>
+        <h3>Today's Business & Profit Summary</h3>
+        <p style="font-size:0.75rem; color:var(--text-3); margin:0;">Daily canteen revenue, estimated net earnings, and sales channels.</p>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="badge badge-amber" id="daily-report-date-badge" style="font-size:0.76rem; padding:5px 10px;">
+        <i class="fa-regular fa-calendar"></i> Today
+      </span>
+      <button class="btn btn-ghost btn-sm" onclick="loadDailyReport()" title="Refresh summary" style="font-size:0.8rem;">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Profit & Sales KPIs -->
+  <div class="profit-kpi-grid">
+    <!-- Gross Sales -->
+    <div class="profit-kpi highlight-revenue">
+      <div class="profit-kpi-label">Gross Sales Today</div>
+      <div class="profit-kpi-val" id="d-revenue" style="color:var(--swatch-espresso);">₱0.00</div>
+      <div class="profit-kpi-sub">
+        <span>Paid: <strong id="d-paid" style="color:#16a34a;">₱0.00</strong></span>
+        <span>·</span>
+        <span>Pending: <strong id="d-unpaid" style="color:#d97706;">₱0.00</strong></span>
+      </div>
+    </div>
+
+    <!-- Estimated Profit -->
+    <div class="profit-kpi highlight-profit">
+      <div class="profit-kpi-label">Estimated Net Profit</div>
+      <div class="profit-kpi-val" id="d-profit" style="color:#15803d;">₱0.00</div>
+      <div class="profit-kpi-sub">
+        <span class="profit-margin-chip" id="d-margin"><i class="fa-solid fa-arrow-trend-up"></i> 40.0% Margin</span>
+        <span style="font-size:0.7rem; color:#4b5563;">(After food cost)</span>
+      </div>
+    </div>
+
+    <!-- Orders Today -->
+    <div class="profit-kpi">
+      <div class="profit-kpi-label">Orders Count (Today)</div>
+      <div class="profit-kpi-val" id="d-orders">0</div>
+      <div class="profit-kpi-sub">
+        <span>Avg Ticket: <strong id="d-avg-ticket">₱0.00</strong></span>
+      </div>
+    </div>
+
+    <!-- Food Stock-in Required -->
+    <div class="profit-kpi" style="border-color:#fca5a5; background:#fffbfb;">
+      <div class="profit-kpi-label" style="color:#991b1b;">Tomorrow's Stock-in</div>
+      <div class="profit-kpi-val" id="d-restock-items" style="color:#b91c1c;">0 Items</div>
+      <div class="profit-kpi-sub">
+        <span id="d-restock-units">0 total units to prep</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payment Channels Breakdown -->
+  <div class="payment-chips-row">
+    <span style="font-size:0.75rem; font-weight:800; text-transform:uppercase; color:var(--text-3); letter-spacing:.05em;">Payment Breakdown:</span>
+    <div class="payment-chip-item" id="pay-cash">
+      <i class="fa-solid fa-money-bill-wave" style="color:#16a34a;"></i>
+      <span>Cash: <strong id="pay-cash-val">₱0.00</strong> <span id="pay-cash-cnt" style="font-size:0.72rem; color:var(--text-3);">(0)</span></span>
+    </div>
+    <div class="payment-chip-item" id="pay-gcash">
+      <i class="fa-solid fa-mobile-screen-button" style="color:#0284c7;"></i>
+      <span>GCash: <strong id="pay-gcash-val">₱0.00</strong> <span id="pay-gcash-cnt" style="font-size:0.72rem; color:var(--text-3);">(0)</span></span>
+    </div>
+    <div class="payment-chip-item" id="pay-maya">
+      <i class="fa-solid fa-credit-card" style="color:#7c3aed;"></i>
+      <span>Maya: <strong id="pay-maya-val">₱0.00</strong> <span id="pay-maya-cnt" style="font-size:0.72rem; color:var(--text-3);">(0)</span></span>
+    </div>
+  </div>
+
+  <!-- ── Tomorrow's Food Stock-In & Prep Guide ────────────────── -->
+  <div class="restock-section">
+    <div class="restock-header">
+      <div>
+        <h4 style="font-size:1.05rem; font-weight:800; color:#9a3412; margin-bottom:2px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-box-open" style="color:#ea580c"></i> Tomorrow's Stock-In & Kitchen Prep Guide
+        </h4>
+        <p style="font-size:0.76rem; color:#78350f; margin:0;">
+          Items requiring replenishment for tomorrow based on current inventory, depletion, and today's sales rate.
+        </p>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary btn-sm" onclick="stockInAllRecommended()" id="btn-stock-all" style="background:#ffffff; border-color:#f97316; color:#c2410c; font-weight:700;">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Stock In All Recommended
+        </button>
+      </div>
+    </div>
+
+    <!-- Restock items table -->
+    <div class="table-wrap" style="background:#ffffff; border:1px solid #fed7aa; border-radius:10px;">
+      <table id="restock-table">
+        <thead>
+          <tr>
+            <th>Food Item</th>
+            <th>Category & Canteen</th>
+            <th>Current Stock</th>
+            <th>Sold Today</th>
+            <th>Recommended Prep (Tomorrow)</th>
+            <th>Urgency</th>
+            <th style="text-align:right">Action</th>
+          </tr>
+        </thead>
+        <tbody id="restock-tbody">
+          <tr>
+            <td colspan="7" style="text-align:center; padding:20px; color:var(--text-3);">
+              <div class="spinner" style="margin:0 auto 10px;"></div>
+              Analyzing inventory and today's consumption rate…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- All-time KPIs -->
+<div class="kpi-grid cols-4 section-gap">
+  <div class="kpi-card"><div class="kpi-icon blue"><i class="fa-solid fa-bag-shopping"></i></div><div class="kpi-body"><div class="kpi-label">Total Orders</div><div class="kpi-value" id="k-total">—</div><div class="kpi-sub">All time history</div></div></div>
+  <div class="kpi-card"><div class="kpi-icon green"><i class="fa-solid fa-peso-sign"></i></div><div class="kpi-body"><div class="kpi-label">All-Time Revenue</div><div class="kpi-value" id="k-revenue">—</div><div class="kpi-sub">All time history</div></div></div>
+  <div class="kpi-card"><div class="kpi-icon amber"><i class="fa-solid fa-clock"></i></div><div class="kpi-body"><div class="kpi-label">Active Orders</div><div class="kpi-value" id="k-active">—</div><div class="kpi-sub">In kitchen queue</div></div></div>
+  <div class="kpi-card"><div class="kpi-icon red"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="kpi-body"><div class="kpi-label">Low Stock</div><div class="kpi-value" id="k-stock">—</div><div class="kpi-sub">Items below 10</div></div></div>
+</div>
+
+<!-- Queue breakdown + Low stock -->
+<div class="grid-2 section-gap">
+
+  <!-- Queue mini cards -->
+  <div class="card">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-layer-group"></i> Live Queue Breakdown</h3>
+      <a href="{{ url_for('pages.admin_pos') }}" class="btn btn-ghost btn-sm">Open POS Terminal</a>
+    </div>
+    <div style="display:grid;gap:10px">
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-icon amber"><i class="fa-solid fa-hourglass-start"></i></div>
+        <div class="kpi-body"><div class="kpi-label">Waiting</div><div class="kpi-value" id="q-waiting" style="font-size:1.4rem">—</div></div>
+      </div>
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-icon blue"><i class="fa-solid fa-spinner"></i></div>
+        <div class="kpi-body"><div class="kpi-label">Processing</div><div class="kpi-value" id="q-processing" style="font-size:1.4rem">—</div></div>
+      </div>
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-icon purple"><i class="fa-solid fa-bell"></i></div>
+        <div class="kpi-body"><div class="kpi-label">Ready for Pickup</div><div class="kpi-value" id="q-ready" style="font-size:1.4rem">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent queue preview -->
+  <div class="card">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-bolt"></i> Recent Kitchen Queue</h3>
+      <a href="{{ url_for('pages.admin_orders') }}" class="btn btn-ghost btn-sm">Queue Details</a>
+    </div>
+    <div id="recent-queue">
+      <div class="loading-box"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ── Printable Daily Report & Kitchen Prep Sheet Modal ── -->
+<div id="printable-report-modal" class="receipt-modal-backdrop printable-report-modal">
+  <div class="card printable-daily-report" style="width:100%; max-width:680px; max-height:92vh; overflow-y:auto; padding:28px; background:#ffffff; box-shadow:0 25px 50px rgba(0,0,0,0.25);">
+    
+    <!-- Header -->
+    <div style="text-align:center; border-bottom:2px solid #0f172a; padding-bottom:14px; margin-bottom:16px;">
+      <h2 style="font-size:1.35rem; font-weight:900; letter-spacing:1px; margin-bottom:2px; color:#0f172a;">DIGIBITES CANTEEN SYSTEM</h2>
+      <p style="font-size:12px; color:#475569; margin-bottom:4px;">Official Daily Sales, Profit & Tomorrow's Kitchen Prep Audit</p>
+      <div style="font-size:12px; font-weight:700; color:#0f172a;" id="pr-date">Report Date: --</div>
+    </div>
+
+    <!-- Financial Performance Summary -->
+    <h4 style="font-size:0.92rem; font-weight:800; text-transform:uppercase; color:#0f172a; margin-bottom:8px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">
+      1. Daily Financial & Profit Summary
+    </h4>
+    <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:16px;">
+      <tbody>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:6px 0;">Total Orders Placed:</td>
+          <td style="text-align:right; font-weight:700;" id="pr-orders">0</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:6px 0;">Gross Revenue:</td>
+          <td style="text-align:right; font-weight:700;" id="pr-revenue">₱0.00</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:6px 0;">Estimated Cost of Goods Sold (60%):</td>
+          <td style="text-align:right; color:#dc2626;" id="pr-cost">-₱0.00</td>
+        </tr>
+        <tr style="border-bottom:2px solid #0f172a; font-weight:800; font-size:13px;">
+          <td style="padding:8px 0; color:#15803d;">ESTIMATED NET PROFIT (40% Margin):</td>
+          <td style="text-align:right; color:#15803d;" id="pr-profit">₱0.00</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0; font-size:11px; color:#64748b;">Collections Breakdown:</td>
+          <td style="text-align:right; font-size:11px; color:#64748b;" id="pr-payments">--</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Tomorrow's Prep Sheet -->
+    <h4 style="font-size:0.92rem; font-weight:800; text-transform:uppercase; color:#0f172a; margin-bottom:8px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">
+      2. Tomorrow's Kitchen Prep & Stock-In Checklist
+    </h4>
+    <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:20px;">
+      <thead>
+        <tr style="border-bottom:1px solid #0f172a; font-size:11px; text-transform:uppercase;">
+          <th style="text-align:left; padding:6px 0;">Food Item</th>
+          <th style="text-align:left;">Category</th>
+          <th style="text-align:center;">Current Stock</th>
+          <th style="text-align:center;">Sold Today</th>
+          <th style="text-align:right;">Target Prep</th>
+        </tr>
+      </thead>
+      <tbody id="pr-prep-tbody">
+        <!-- Injected -->
+      </tbody>
+    </table>
+
+    <!-- Signatures -->
+    <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px; border-top:1px dashed #cbd5e1; font-size:11px;">
+      <div style="text-align:center; width:200px;">
+        <div style="border-bottom:1px solid #0f172a; margin-bottom:4px; height:24px;"></div>
+        <span>Canteen Head Cook (Signature)</span>
+      </div>
+      <div style="text-align:center; width:200px;">
+        <div style="border-bottom:1px solid #0f172a; margin-bottom:4px; height:24px;"></div>
+        <span>Canteen Administrator (Signature)</span>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:24px;" class="no-print">
+      <button class="btn btn-secondary btn-sm" onclick="closePrintableReportModal()">Close</button>
+      <button class="btn btn-primary btn-sm" onclick="window.print()">
+        <i class="fa-solid fa-print"></i> Print Document
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Reset Daily Income Confirmation Modal ─────────────────── -->
+<div id="reset-income-modal" role="dialog" aria-modal="true" aria-labelledby="reset-income-title" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; align-items:center; justify-content:center; padding:16px;" onclick="if(event.target===this)closeResetIncomeModal()">
+  <div class="card" style="width:100%; max-width:440px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2);">
+    <div class="card-header" style="background:#fef2f2; border-bottom:1px solid #fee2e2;">
+      <h3 style="color:#991b1b; display:flex; align-items:center; gap:8px; font-size:1rem;">
+        <i class="fa-solid fa-arrow-rotate-left" style="color:#dc2626;"></i>
+        <span id="reset-income-title">Reset Daily Income</span>
+      </h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeResetIncomeModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:20px;">
+      <p style="font-weight:700; margin:0 0 14px;">Are you sure you want to reset today's income? This action cannot be undone.</p>
+      <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="font-weight:700; color:#c2410c; display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+          <i class="fa-solid fa-triangle-exclamation"></i> This action is irreversible for today's income view.
+        </div>
+        <div style="font-size:0.84rem; color:#7c3a0e; line-height:1.5;">
+          Before resetting, the current daily income snapshot will be <strong>archived</strong> to the income log for audit purposes.
+          The dashboard counter will display <strong>₱0.00</strong> until new orders are placed.
+        </div>
+      </div>
+      <div id="reset-income-current" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; margin-bottom:16px; font-size:0.85rem; display:none;">
+        <div style="font-weight:700; color:#166534; margin-bottom:4px;">Current Income Snapshot (to be archived)</div>
+        <div>Total Revenue: <strong id="ri-revenue">₱0.00</strong></div>
+        <div>Paid Revenue: <strong id="ri-paid">₱0.00</strong></div>
+        <div>Total Orders: <strong id="ri-orders">0</strong></div>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeResetIncomeModal()">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-reset" onclick="confirmResetDailyIncome()">
+          <i class="fa-solid fa-arrow-rotate-left"></i> Confirm Reset
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const STATUS_BADGE = {
+  'Waiting':    'badge-amber',
+  'Processing': 'badge-blue',
+  'To Pickup':  'badge-purple',
+  'Completed':  'badge-green',
+  'Cancelled':  'badge-red',
+};
+
+let currentDailyReportData = null;
+
+async function loadDashboard() {
+  await Promise.all([loadStats(), loadDailyReport()]);
+}
+
+async function loadStats() {
+  const data = await api('/api/admin/stats');
+  if (!data.success) return;
+  const s = data.data;
+
+  document.getElementById('k-total').textContent      = s.total_orders;
+  document.getElementById('k-revenue').textContent    = peso(s.total_revenue);
+  document.getElementById('k-active').textContent     = s.active_orders;
+  document.getElementById('k-stock').textContent      = s.low_stock_count;
+  document.getElementById('q-waiting').textContent    = s.waiting_count;
+  document.getElementById('q-processing').textContent = s.processing_count;
+  document.getElementById('q-ready').textContent      = s.ready_count;
+
+  // Recent queue
+  const rq = document.getElementById('recent-queue');
+  if (!s.recent_queue || !s.recent_queue.length) {
+    rq.innerHTML = `<div class="empty-state" style="padding:20px"><div class="empty-icon" style="font-size:2rem">🎉</div><p>No active orders right now.</p></div>`;
+  } else {
+    rq.innerHTML = s.recent_queue.map(o => {
+      const items = (o.items || []).map(i => `${i.name} ×${i.qty}`).join(' · ');
+      return `
+      <div class="order-card" style="margin-bottom:8px;">
+        <div class="order-card-header">
+          <div><div class="order-num">${o.order_number}</div><div class="order-time">${o.created_at}</div></div>
+          <div style="display:flex;gap:6px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-gray'}">${o.status}</span></div>
+        </div>
+        <div class="order-items"><strong>${o.customer_name}</strong> — ${items}</div>
+        <div class="order-footer"><div class="order-total">${peso(o.total)}</div><span class="badge ${o.payment_status==='Paid'?'badge-green':'badge-amber'}">${o.payment_status}</span></div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function loadDailyReport() {
+  try {
+    const res = await api('/api/admin/daily-report');
+    if (!res.success) return;
+    const r = res.data;
+    currentDailyReportData = r;
+
+    // Date badge
+    const badge = document.getElementById('daily-report-date-badge');
+    badge.innerHTML = `<i class="fa-regular fa-calendar"></i> ${r.report_date}${r.is_fallback_date ? ' (Recent Sales)' : ' (Today)'}`;
+
+    // KPI Values
+    document.getElementById('d-revenue').textContent      = peso(r.today_revenue);
+    document.getElementById('d-paid').textContent         = peso(r.paid_revenue);
+    document.getElementById('d-unpaid').textContent       = peso(r.unpaid_revenue);
+    document.getElementById('d-profit').textContent       = peso(r.today_profit);
+    document.getElementById('d-margin').innerHTML         = `<i class="fa-solid fa-arrow-trend-up"></i> ${r.profit_margin_pct}% Margin`;
+    document.getElementById('d-orders').textContent       = `${r.today_orders} orders`;
+    document.getElementById('d-avg-ticket').textContent   = peso(r.avg_order_value);
+    document.getElementById('d-restock-items').textContent= `${r.total_items_to_restock} Dishes`;
+    document.getElementById('d-restock-units').textContent= `${r.total_units_to_prep} servings to prep`;
+
+    // Payment breakdown
+    const pm = r.payment_methods || {};
+    const cash = pm['Cash on Pickup'] || {total:0, count:0};
+    const gcash = pm['GCash'] || {total:0, count:0};
+    const maya = pm['Maya'] || {total:0, count:0};
+
+    document.getElementById('pay-cash-val').textContent = peso(cash.total);
+    document.getElementById('pay-cash-cnt').textContent = `(${cash.count} orders)`;
+    document.getElementById('pay-gcash-val').textContent = peso(gcash.total);
+    document.getElementById('pay-gcash-cnt').textContent = `(${gcash.count} orders)`;
+    document.getElementById('pay-maya-val').textContent = peso(maya.total);
+    document.getElementById('pay-maya-cnt').textContent = `(${maya.count} orders)`;
+
+    // Restock list
+    const tbody = document.getElementById('restock-tbody');
+    const items = r.tomorrow_restock_list || [];
+
+    if (!items.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center; padding:24px; color:#16a34a; font-weight:700;">
+            <i class="fa-solid fa-circle-check" style="font-size:1.5rem; margin-bottom:6px; display:block;"></i>
+            All food items are fully stocked for tomorrow! No critical prep needed.
+          </td>
+        </tr>`;
+      document.getElementById('btn-stock-all').disabled = true;
+    } else {
+      document.getElementById('btn-stock-all').disabled = false;
+      tbody.innerHTML = items.map(i => {
+        let badgeCls = 'restock-badge-mod';
+        if (i.urgency_level === 1) badgeCls = 'restock-badge-urgent';
+        else if (i.urgency_level === 2) badgeCls = 'restock-badge-high';
+
+        return `
+        <tr>
+          <td>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:1.4rem;">${i.emoji}</span>
+              <div>
+                <strong style="color:var(--text);">${i.name}</strong>
+                <div style="font-size:11px; color:var(--text-3);">${peso(i.price)} / serving</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="badge badge-gray" style="font-size:0.75rem;">${i.category}</span>
+            <div style="font-size:11px; color:var(--text-3); margin-top:2px;">${i.canteen}</div>
+          </td>
+          <td>
+            <span class="badge ${i.current_stock <= 0 ? 'badge-red' : i.current_stock <= 10 ? 'badge-amber' : 'badge-gray'}">
+              ${i.current_stock <= 0 ? 'Sold Out' : i.current_stock + ' left'}
+            </span>
+          </td>
+          <td style="font-weight:700; color:var(--text-2);">
+            ${i.sold_today} units
+          </td>
+          <td>
+            <div style="font-weight:800; color:#ea580c; font-size:0.95rem;">
+              +${i.recommended_stock_in} servings
+            </div>
+            <div style="font-size:11px; color:var(--text-3);">Target: ${i.target_stock} | Est. Cost: ${peso(i.est_prep_cost)}</div>
+          </td>
+          <td>
+            <span class="${badgeCls}">${i.urgency}</span>
+          </td>
+          <td style="text-align:right;">
+            <button class="btn btn-secondary btn-sm" onclick="quickStockIn(${i.id}, '${escapeJs(i.name)}', ${i.recommended_stock_in})" style="font-size:0.78rem; padding:4px 10px;">
+              <i class="fa-solid fa-plus"></i> Stock In
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+  } catch (err) {
+    console.error('Failed to load daily report:', err);
+  }
+}
+
+function escapeJs(str) {
+  return (str || '').replace(/'/g, "\\'");
+}
+
+async function quickStockIn(itemId, itemName, defaultQty) {
+  const qtyStr = prompt(`Enter quantity to stock in for ${itemName}:`, defaultQty);
+  if (!qtyStr) return;
+  const qty = parseInt(qtyStr);
+  if (isNaN(qty) || qty <= 0) {
+    alert('Please enter a valid positive number.');
+    return;
+  }
+
+  const res = await api('/api/admin/quick-restock', {
+    method: 'POST',
+    body: JSON.stringify({ item_id: itemId, add_qty: qty })
+  });
+
+  if (res.success) {
+    toast(`Added +${qty} to ${itemName}`, 'success');
+    loadDashboard();
+  } else {
+    toast(res.message || 'Restock failed.', 'error');
+  }
+}
+
+async function stockInAllRecommended() {
+  if (!currentDailyReportData || !currentDailyReportData.tomorrow_restock_list.length) return;
+  const items = currentDailyReportData.tomorrow_restock_list;
+  const count = items.length;
+  const units = currentDailyReportData.total_units_to_prep;
+
+  const ok = confirm(`Stock in all recommended quantities for tomorrow?\n\n• ${count} different items\n• ${units} total servings\n\nThis will add recommended buffer stock and set dishes to Available.`);
+  if (!ok) return;
+
+  const batch = items.map(i => ({ id: i.id, qty: i.recommended_stock_in }));
+  const res = await api('/api/admin/quick-restock', {
+    method: 'POST',
+    body: JSON.stringify({ batch: batch })
+  });
+
+  if (res.success) {
+    toast(`Successfully stocked in ${units} servings across ${count} items!`, 'success');
+    loadDashboard();
+  } else {
+    toast(res.message || 'Batch restock failed.', 'error');
+  }
+}
+
+function openPrintableReportModal() {
+  if (!currentDailyReportData) {
+    toast('Report data is still loading...', 'warning');
+    return;
+  }
+  const r = currentDailyReportData;
+
+  document.getElementById('pr-date').textContent = `Report Date: ${r.report_date} (${new Date().toLocaleTimeString()})`;
+  document.getElementById('pr-orders').textContent = `${r.today_orders} completed/active orders`;
+  document.getElementById('pr-revenue').textContent = peso(r.today_revenue);
+  document.getElementById('pr-cost').textContent = `-${peso(r.today_cost)}`;
+  document.getElementById('pr-profit').textContent = `${peso(r.today_profit)} (${r.profit_margin_pct}% Margin)`;
+
+  const pm = r.payment_methods || {};
+  const c = pm['Cash on Pickup'] || {total:0, count:0};
+  const g = pm['GCash'] || {total:0, count:0};
+  const m = pm['Maya'] || {total:0, count:0};
+  document.getElementById('pr-payments').textContent = `Cash: ${peso(c.total)} (${c.count}) | GCash: ${peso(g.total)} (${g.count}) | Maya: ${peso(m.total)} (${m.count})`;
+
+  const tbody = document.getElementById('pr-prep-tbody');
+  const items = r.tomorrow_restock_list || [];
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:10px;">All items are adequately stocked. No critical food prep required.</td></tr>`;
+  } else {
+    tbody.innerHTML = items.map(i => `
+      <tr style="border-bottom:1px solid #e2e8f0;">
+        <td style="padding:6px 0;"><strong>${i.emoji} ${i.name}</strong></td>
+        <td>${i.category} (${i.canteen})</td>
+        <td style="text-align:center;">${i.current_stock <= 0 ? 'SOLD OUT' : i.current_stock}</td>
+        <td style="text-align:center;">${i.sold_today}</td>
+        <td style="text-align:right; font-weight:800; color:#ea580c;">+${i.recommended_stock_in} (Target: ${i.target_stock})</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('printable-report-modal').style.display = 'flex';
+}
+
+function closePrintableReportModal() {
+  document.getElementById('printable-report-modal').style.display = 'none';
+}
+
+/* ── Reset Daily Income ──────────────────────────────────── */
+function openResetIncomeModal() {
+  // Pre-fill snapshot from already-loaded daily report data
+  if (currentDailyReportData) {
+    const report = currentDailyReportData;
+    const reportIsFallback = report.is_fallback_date;
+    document.getElementById('ri-revenue').textContent = peso(reportIsFallback ? 0 : report.today_revenue || 0);
+    document.getElementById('ri-paid').textContent    = peso(reportIsFallback ? 0 : report.paid_revenue || 0);
+    document.getElementById('ri-orders').textContent  = reportIsFallback ? 0 : report.today_orders || 0;
+    document.getElementById('reset-income-current').style.display = 'block';
+  }
+  document.getElementById('reset-income-modal').style.display = 'flex';
+}
+
+function closeResetIncomeModal() {
+  document.getElementById('reset-income-modal').style.display = 'none';
+}
+
+async function confirmResetDailyIncome() {
+  const btn = document.getElementById('btn-confirm-reset');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Resetting…';
+  try {
+    const result = await api('/api/admin/reset-daily-income', { method: 'POST' });
+    if (result.success) {
+      toast('Daily income has been reset and archived successfully.', 'success');
+      closeResetIncomeModal();
+      await loadDashboard();
+    } else {
+      toast(result.message || 'Failed to reset daily income.', 'error');
+    }
+  } catch (err) {
+    toast('An error occurred. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-arrow-rotate-left"></i> Confirm Reset';
+  }
+}
+
+loadDashboard();
+setInterval(loadDashboard, 20000);
+</script>
+{% endblock %}

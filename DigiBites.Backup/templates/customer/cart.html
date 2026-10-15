@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% block page_title %}My Cart{% endblock %}
+{% block topbar_title %}My Cart{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1>My Cart</h1><p>Review and place your order</p></div>
+  <a href="{{ url_for('pages.customer_menu') }}" class="btn btn-secondary">
+    <i class="fa-solid fa-arrow-left"></i> Continue Shopping
+  </a>
+</div>
+<div id="cart-canteen-warning" role="alert" class="section-gap" hidden></div>
+
+<div class="grid-2" style="align-items:start">
+
+  <!-- Cart items -->
+  <div class="card">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-list"></i> Items</h3>
+      <button class="btn btn-ghost btn-sm" onclick="clearCartUI()"><i class="fa-solid fa-trash"></i> Clear</button>
+    </div>
+    <div id="cart-body">
+      <div class="loading-box"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Order summary -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3><i class="fa-solid fa-receipt"></i> Summary</h3></div>
+      <div style="font-size:.88rem">
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-2)">Subtotal</span>
+          <strong id="summary-sub">₱0.00</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text-2)">Service</span>
+          <span style="color:var(--text-3)">Free</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0;font-size:1.1rem">
+          <strong>Total</strong>
+          <strong style="color:var(--primary-dark)" id="summary-total">₱0.00</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3><i class="fa-solid fa-money-bill"></i> Payment</h3></div>
+      <div class="form-group">
+        <label class="form-label" for="payment-method">Payment Method</label>
+        <select class="form-control" id="payment-method">
+          <option value="Cash on Pickup">Cash on Pickup</option>
+          <option value="GCash">GCash</option>
+          <option value="Maya">Maya</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" id="btn-order" onclick="placeOrder()">
+        <i class="fa-solid fa-bag-shopping"></i> Place Order
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Digital Receipt Modal ────────────────────────────── -->
+<div class="receipt-modal-backdrop" id="digital-receipt-modal">
+  <div class="receipt-card">
+    
+    <!-- Top Header Banner -->
+    <div class="receipt-header-banner">
+      <div class="success-icon"><i class="fa-solid fa-check"></i></div>
+      <h2>ORDER CONFIRMED</h2>
+      <p>DigiBites Canteen Digital Receipt</p>
+    </div>
+
+    <!-- Receipt Paper Body -->
+    <div class="receipt-body">
+      <!-- Meta Information -->
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-item">
+          <span class="meta-label">Order #</span>
+          <span class="meta-val" id="rec-order-num">ORD-0000</span>
+        </div>
+        <div class="receipt-meta-item" style="text-align:right">
+          <span class="meta-label">Date & Time</span>
+          <span class="meta-val" id="rec-date-time">--</span>
+        </div>
+        <div class="receipt-meta-item">
+          <span class="meta-label">Customer</span>
+          <span class="meta-val" id="rec-customer">--</span>
+        </div>
+        <div class="receipt-meta-item" style="text-align:right">
+          <span class="meta-label">Payment</span>
+          <span class="meta-val" id="rec-payment">--</span>
+        </div>
+      </div>
+
+      <!-- Itemized Table -->
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th>Item & Qty</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="rec-items-tbody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+
+      <!-- Totals -->
+      <div class="receipt-totals">
+        <div class="total-row">
+          <span>Subtotal</span>
+          <span id="rec-subtotal">₱0.00</span>
+        </div>
+        <div class="total-row">
+          <span>Packing / Service</span>
+          <span style="color:#10b981; font-weight:700;">FREE</span>
+        </div>
+        <div class="total-row grand-total">
+          <span>TOTAL DUE</span>
+          <span id="rec-total">₱0.00</span>
+        </div>
+      </div>
+
+      <!-- Simulated Barcode -->
+      <div class="receipt-barcode" id="rec-barcode">||||| | |||| || ||| ||||</div>
+
+      <!-- Footer Pickup Note -->
+      <div class="receipt-footer-note">
+        <i class="fa-solid fa-bell" style="color:var(--swatch-caramel)"></i>
+        Please show this slip or your Order Number at the pick-up counter when called.
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="receipt-actions no-print">
+      <button class="btn btn-secondary btn-block" onclick="window.print()" title="Print receipt or save as PDF">
+        <i class="fa-solid fa-print"></i> Print
+      </button>
+      <a href="{{ url_for('pages.customer_orders') }}" class="btn btn-primary btn-block">
+        <i class="fa-solid fa-list-check"></i> My Orders
+      </a>
+      <button class="btn btn-ghost" onclick="closeDigitalReceipt()" title="Close and browse menu">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Order Allergen Warning Modal ─────────────────────── -->
+<div id="order-allergen-modal" class="allergen-confirm-modal">
+  <div class="card allergen-confirm-card">
+    <div class="card-header" style="background:#fef2f2; border-bottom:1px solid #fee2e2;">
+      <h3 style="color:#991b1b; display:flex; align-items:center; gap:8px; margin:0;">
+        <i class="fa-solid fa-triangle-exclamation" style="color:#dc2626; font-size:1.25rem;"></i>
+        <span>Allergen Warning Alert</span>
+      </h3>
+      <button class="btn btn-ghost btn-sm" onclick="cancelOrderAllergenModal()">✕</button>
+    </div>
+    <div style="padding:18px;">
+      <p id="order-warning-message" style="font-size:0.95rem; color:#1e293b; line-height:1.5; margin:0 0 14px;">
+        You are about to place an order with items matching your saved dietary profile.
+      </p>
+
+      <div style="background:#fee2e2; border:1px solid #fca5a5; border-radius:10px; padding:12px; margin:14px 0;">
+        <div style="font-weight:700; color:#991b1b; font-size:0.86rem; margin-bottom:4px;">
+          ⚠️ MATCHED ALLERGEN(S):
+        </div>
+        <div id="order-warning-allergens" style="font-size:0.9rem; font-weight:800; color:#7f1d1d;"></div>
+        <div id="order-warning-details" style="font-size:0.78rem; color:#b91c1c; margin-top:4px;">
+          This item contains ingredients matching your saved dietary profile!
+        </div>
+      </div>
+
+      <div style="font-size:0.82rem; color:#64748b; margin-bottom:18px;">
+        Do you still want to continue placing this order?
+      </div>
+
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="cancelOrderAllergenModal()">
+          <i class="fa-solid fa-xmark"></i> Cancel (Stay Safe)
+        </button>
+        <button class="btn btn-danger" id="order-warning-confirm-btn" onclick="confirmOrderDespiteAllergens()">
+          <i class="fa-solid fa-triangle-exclamation"></i> Continue Placing Order
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CUR_USER = '{{ user.username }}';
+const CUR_NAME = '{{ user.full_name }}';
+const MAX_STUDENT_ITEM_QTY = 2;
+let studentAllergies = [];
+let pendingOrderConfirmation = null;
+
+function selectedCartCanteen(cart) {
+  const selected = (localStorage.getItem('digibites_selected_canteen') || '').toUpperCase();
+  if (['SHS', 'JHS'].includes(selected)) return selected;
+
+  const cartCanteens = [...new Set(cart.map(item => (item.canteen || '').toUpperCase()))];
+  if (cartCanteens.length === 1 && ['SHS', 'JHS'].includes(cartCanteens[0])) {
+    localStorage.setItem('digibites_selected_canteen', cartCanteens[0]);
+    return cartCanteens[0];
+  }
+  return '';
+}
+
+function showOrderAllergenModal(message, allergens, details = 'This order contains ingredients matching your saved dietary profile!') {
+  document.getElementById('order-warning-message').textContent = message;
+  document.getElementById('order-warning-allergens').textContent = allergens.join(', ');
+  document.getElementById('order-warning-details').textContent = details;
+  document.getElementById('order-allergen-modal').style.display = 'flex';
+}
+
+function closeOrderAllergenModal() {
+  document.getElementById('order-allergen-modal').style.display = 'none';
+}
+
+function cancelOrderAllergenModal() {
+  pendingOrderConfirmation = null;
+  closeOrderAllergenModal();
+}
+
+function confirmOrderDespiteAllergens() {
+  if (pendingOrderConfirmation) {
+    const confirmFn = pendingOrderConfirmation;
+    pendingOrderConfirmation = null;
+    closeOrderAllergenModal();
+    confirmFn();
+    return;
+  }
+  closeOrderAllergenModal();
+}
+
+async function loadStudentAllergies() {
+  try {
+    const data = await api(`/api/student/allergies?student_id=${encodeURIComponent(CUR_USER)}`);
+    if (data.success && Array.isArray(data.allergies)) {
+      studentAllergies = data.allergies;
+    }
+  } catch (err) {
+    studentAllergies = [];
+  }
+  renderCart();
+}
+
+function renderCart() {
+  const cart  = getCart();
+  const body  = document.getElementById('cart-body');
+  const btn   = document.getElementById('btn-order');
+  const warning = document.getElementById('cart-canteen-warning');
+  updateCartBadge();
+  let quantityWasClamped = false;
+  cart.forEach(item => {
+    const quantity = Number(item.qty) || 1;
+    if (quantity > MAX_STUDENT_ITEM_QTY) {
+      item.qty = MAX_STUDENT_ITEM_QTY;
+      quantityWasClamped = true;
+    }
+  });
+  if (quantityWasClamped) {
+    setCart(cart);
+    toast(`Cart quantities are limited to ${MAX_STUDENT_ITEM_QTY} pieces per food.`, 'warning');
+  }
+  document.getElementById('cart-allergen-alert')?.remove();
+
+  if (!cart.length) {
+    warning.hidden = true;
+    body.innerHTML = `<div class="empty-state"><div class="empty-icon">🛒</div><h4>Cart is empty</h4><p>Add items from the menu.</p><a href="{{ url_for('pages.customer_menu') }}" class="btn btn-primary">Browse Menu</a></div>`;
+    btn.disabled = true;
+    document.getElementById('summary-sub').textContent   = peso(0);
+    document.getElementById('summary-total').textContent = peso(0);
+    return;
+  }
+
+  const cartCanteens = [...new Set(cart.map(item => (item.canteen || '').toUpperCase()))];
+  const selectedCanteen = selectedCartCanteen(cart);
+  const cartCanteen = cartCanteens.length === 1 ? cartCanteens[0] : '';
+  const canteenMismatch = !['SHS', 'JHS'].includes(cartCanteen) || selectedCanteen !== cartCanteen;
+  warning.hidden = !canteenMismatch;
+  warning.className = canteenMismatch ? 'card section-gap' : 'section-gap';
+  warning.style.cssText = canteenMismatch
+    ? 'background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:12px 16px;'
+    : '';
+  warning.textContent = cartCanteens.length > 1
+    ? 'Your cart contains items from both canteens. Remove items until only one canteen remains before placing your order.'
+    : 'Select the same canteen as your cart items before placing your order.';
+
+  const total = cart.reduce((s, i) => s + i.price * (i.qty || 1), 0);
+  
+  // Check for allergens across cart items
+  const allMatchingAllergens = new Set();
+
+  body.innerHTML = cart.map((item, idx) => {
+    const itemAllergens = Array.isArray(item.allergens) ? item.allergens : [];
+    const matched = itemAllergens.filter(a => studentAllergies.includes(a));
+    matched.forEach(m => allMatchingAllergens.add(m));
+
+    return `
+    <div class="cart-row" style="${matched.length ? 'border-left:4px solid #ef4444; background:#fffbfb; padding:10px; border-radius:8px;' : ''}">
+      <div class="cart-emoji">${item.emoji || '🍲'}</div>
+      <div class="cart-info">
+        <div class="cart-name" style="font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <span>${item.name}</span>
+          <span class="badge ${item.canteen === 'SHS' ? 'badge-blue' : 'badge-amber'}" style="font-size:0.68rem; padding:1px 6px;">
+            ${item.canteen ? item.canteen + ' Canteen' : 'Campus Canteen'}
+          </span>
+        </div>
+        <div class="cart-price">${peso(item.price)} each</div>
+        ${matched.length ? `
+          <div style="margin-top:4px; font-size:0.75rem; color:#dc2626; font-weight:700; display:flex; align-items:center; gap:4px;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Contains: ${matched.map(window.DIGIBITES_ESCAPE_HTML).join(', ')}
+          </div>
+          <div class="cart-allergen-guidance">${matched.map(allergen => `<p><strong>${window.DIGIBITES_ESCAPE_HTML(allergen)}:</strong> ${window.DIGIBITES_ESCAPE_HTML(window.DIGIBITES_ALLERGEN_GUIDANCE[allergen] || 'Check the full ingredient label and ask canteen staff about preparation and cross-contact.')}</p>`).join('')}</div>
+        ` : ''}
+      </div>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeQty(${idx},-1)"><i class="fa-solid fa-minus"></i></button>
+        <span class="qty-val">${item.qty || 1}</span>
+        <button class="qty-btn" onclick="changeQty(${idx},1)" ${Number(item.qty || 1) >= MAX_STUDENT_ITEM_QTY ? 'disabled title="Maximum 2 per food"' : ''}><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <div class="cart-total">${peso(item.price * (item.qty || 1))}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('summary-sub').textContent   = peso(total);
+  document.getElementById('summary-total').textContent = peso(total);
+  btn.disabled = canteenMismatch;
+
+  // Warning banner if any matched allergens
+  if (allMatchingAllergens.size > 0) {
+    const warnDiv = document.createElement('div');
+    warnDiv.id = 'cart-allergen-alert';
+    warnDiv.className = 'cart-allergen-alert';
+    warnDiv.setAttribute('role', 'alert');
+    const heading = document.createElement('div');
+    heading.className = 'cart-allergen-alert-title';
+    heading.innerHTML = '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>ALLERGEN WARNING IN CART</span>';
+    const intro = document.createElement('p');
+    intro.textContent = `Cart items contain: ${Array.from(allMatchingAllergens).join(', ')}.`;
+    const guidanceList = document.createElement('ul');
+    Array.from(allMatchingAllergens).forEach(allergen => {
+      const item = document.createElement('li');
+      const label = document.createElement('strong');
+      label.textContent = `${allergen}: `;
+      item.append(label, document.createTextNode(window.DIGIBITES_ALLERGEN_GUIDANCE[allergen] || 'Check the full ingredient label and ask canteen staff about preparation and cross-contact.'));
+      guidanceList.appendChild(item);
+    });
+    const emergency = document.createElement('p');
+    emergency.className = 'cart-allergen-emergency';
+    emergency.textContent = 'If a reaction occurs, stop eating and tell staff and a trusted adult. For breathing or swallowing trouble, throat swelling, fainting, or rapidly worsening symptoms, call 911. If the student has prescribed epinephrine, help them use it as directed; do not delay calling.';
+    const callLink = document.createElement('a');
+    callLink.href = 'tel:911';
+    callLink.className = 'btn btn-danger btn-sm';
+    callLink.innerHTML = '<i class="fa-solid fa-phone" aria-hidden="true"></i> Call 911';
+    const caution = document.createElement('p');
+    caution.className = 'cart-allergen-caution';
+    caution.textContent = 'Recipes and labels vary. Ask staff to verify the exact ingredients and cross-contact. If they cannot confirm the item is safe for you, do not eat it.';
+    warnDiv.append(heading, intro, guidanceList, emergency, callLink, caution);
+    btn.parentNode.insertBefore(warnDiv, btn);
+  }
+}
+
+function changeQty(idx, delta) {
+  const cart = getCart();
+  if (delta > 0 && (Number(cart[idx].qty) || 1) >= MAX_STUDENT_ITEM_QTY) {
+    toast(`Maximum ${MAX_STUDENT_ITEM_QTY} pieces per food per order.`, 'warning');
+    return;
+  }
+  cart[idx].qty = (cart[idx].qty || 1) + delta;
+  if (cart[idx].qty <= 0) {
+    cart.splice(idx, 1);
+  }
+  setCart(cart);
+  renderCart();
+}
+
+function clearCartUI() {
+  if (!confirm('Clear your entire cart?')) return;
+  setCart([]);
+  renderCart();
+  toast('Cart cleared.', 'warning');
+}
+
+async function submitOrderRequest() {
+  const cart = getCart();
+  if (!cart.length) { toast('Your cart is empty!', 'error'); return; }
+
+  const canteen = selectedCartCanteen(cart);
+  const cartCanteens = [...new Set(cart.map(item => (item.canteen || '').toUpperCase()))];
+  if (!['SHS', 'JHS'].includes(canteen) || cartCanteens.length !== 1 || cartCanteens[0] !== canteen) {
+    toast('Choose one canteen and make sure every cart item belongs to it.', 'error');
+    renderCart();
+    return;
+  }
+
+  const btn = document.getElementById('btn-order');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing order…';
+
+  const payload = {
+    student_id:     CUR_USER,
+    customer_name:  CUR_NAME,
+    canteen,
+    items:          cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty || 1, emoji: i.emoji, canteen: i.canteen || 'SHS' })),
+    payment_method: document.getElementById('payment-method').value,
+  };
+
+  try {
+    const data = await api('/api/orders', { method: 'POST', body: JSON.stringify(payload) });
+    if (data.success && data.order) {
+      setCart([]);
+      renderCart();
+      toast(`Order ${data.order.order_number} confirmed!`, 'success');
+      showDigitalReceipt(data.order);
+    } else {
+      toast(data.message || 'Order failed.', 'error');
+    }
+  } catch (err) {
+    toast('Error submitting order: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-bag-shopping"></i> Place Order';
+  }
+}
+
+async function placeOrder() {
+  const cart = getCart();
+  if (!cart.length) { toast('Your cart is empty!', 'error'); return; }
+
+  const conflicts = [];
+  const allergenSet = new Set();
+
+  cart.forEach(item => {
+    const itemAllergens = Array.isArray(item.allergens) ? item.allergens : [];
+    const matched = itemAllergens.filter(a => studentAllergies.includes(a));
+    if (matched.length > 0) {
+      conflicts.push(`${item.name} (${matched.join(', ')})`);
+      matched.forEach(a => allergenSet.add(a));
+    }
+  });
+
+  if (conflicts.length > 0) {
+    const uniqueAllergens = Array.from(allergenSet);
+    const message = `You are about to place an order with ${conflicts.length === 1 ? 'an item' : 'items'} matching your saved dietary profile.`;
+    pendingOrderConfirmation = submitOrderRequest;
+    showOrderAllergenModal(message, uniqueAllergens, 'This order contains ingredients matching your saved dietary profile!');
+    return;
+  }
+
+  await submitOrderRequest();
+}
+
+function showDigitalReceipt(order) {
+  document.getElementById('rec-order-num').textContent = order.order_number || ('ORD-' + order.order_id);
+  document.getElementById('rec-date-time').textContent = new Date().toLocaleString([], { 
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+  });
+  document.getElementById('rec-customer').textContent = order.customer_name || CUR_NAME || CUR_USER;
+  document.getElementById('rec-payment').textContent = `${order.payment_method} (${order.payment_status || 'Unpaid'})`;
+
+  const tbody = document.getElementById('rec-items-tbody');
+  tbody.innerHTML = (order.items || []).map(i => `
+    <tr>
+      <td>
+        <span style="font-weight:700; color:#0f172a;">${i.emoji || '🍲'} ${i.name}</span>
+        <div style="font-size:11px; color:#64748b;">${i.qty || 1} × ${peso(i.price)}</div>
+      </td>
+      <td>${peso(i.price * (i.qty || 1))}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('rec-subtotal').textContent = peso(order.total);
+  document.getElementById('rec-total').textContent = peso(order.total);
+  document.getElementById('rec-barcode').textContent = `* ${order.order_number} *`;
+
+  document.getElementById('digital-receipt-modal').style.display = 'flex';
+}
+
+function closeDigitalReceipt() {
+  document.getElementById('digital-receipt-modal').style.display = 'none';
+  window.location.href = '{{ url_for("pages.customer_menu") }}';
+}
+
+loadStudentAllergies();
+</script>
+{% endblock %}

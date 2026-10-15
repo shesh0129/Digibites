@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block page_title %}My Orders{% endblock %}
+{% block topbar_title %}My Orders{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1>My Orders</h1><p>Track your current and past orders</p></div>
+  <a href="{{ url_for('pages.customer_menu') }}" class="btn btn-primary">
+    <i class="fa-solid fa-plus"></i> New Order
+  </a>
+</div>
+
+<!-- Active order tracker -->
+<div id="active-section" style="display:none" class="section-gap">
+  <div class="card">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-satellite-dish"></i> Active Order</h3>
+      <button class="btn btn-ghost btn-sm" onclick="loadOrders()"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+    </div>
+    <div id="active-tracker" class="progress-track"></div>
+    <div id="active-detail" style="margin-top:12px;font-size:.85rem;color:var(--text-2)"></div>
+  </div>
+</div>
+
+<!-- All orders list -->
+<div class="card">
+  <div class="card-header">
+    <h3><i class="fa-solid fa-clock-rotate-left"></i> Order History</h3>
+    <select class="form-control" id="status-filter" style="width:auto;font-size:.8rem" onchange="applyFilter()">
+      <option value="">All Statuses</option>
+      <option value="Waiting">Waiting</option>
+      <option value="Processing">Processing</option>
+      <option value="To Pickup">To Pickup</option>
+      <option value="Completed">Completed</option>
+      <option value="Cancelled">Cancelled</option>
+    </select>
+  </div>
+  <div id="orders-list">
+    <div class="loading-box"><div class="spinner"></div><p style="margin-top:10px">Loading orders…</p></div>
+  </div>
+</div>
+
+<!-- ── Digital Receipt Modal ────────────────────────────── -->
+<div class="receipt-modal-backdrop" id="digital-receipt-modal">
+  <div class="receipt-card">
+    
+    <!-- Top Header Banner -->
+    <div class="receipt-header-banner">
+      <div class="success-icon"><i class="fa-solid fa-receipt"></i></div>
+      <h2>DIGITAL RECEIPT</h2>
+      <p>DigiBites Canteen Electronic Slip</p>
+    </div>
+
+    <!-- Receipt Paper Body -->
+    <div class="receipt-body">
+      <!-- Meta Information -->
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-item">
+          <span class="meta-label">Order #</span>
+          <span class="meta-val" id="rec-order-num">ORD-0000</span>
+        </div>
+        <div class="receipt-meta-item" style="text-align:right">
+          <span class="meta-label">Date & Time</span>
+          <span class="meta-val" id="rec-date-time">--</span>
+        </div>
+        <div class="receipt-meta-item">
+          <span class="meta-label">Customer</span>
+          <span class="meta-val" id="rec-customer">--</span>
+        </div>
+        <div class="receipt-meta-item" style="text-align:right">
+          <span class="meta-label">Status</span>
+          <span class="meta-val" id="rec-status">--</span>
+        </div>
+      </div>
+
+      <!-- Itemized Table -->
+      <table class="receipt-items-table">
+        <thead>
+          <tr>
+            <th>Item & Qty</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="rec-items-tbody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+
+      <!-- Totals -->
+      <div class="receipt-totals">
+        <div class="total-row">
+          <span>Subtotal</span>
+          <span id="rec-subtotal">₱0.00</span>
+        </div>
+        <div class="total-row">
+          <span>Packing / Service</span>
+          <span style="color:#10b981; font-weight:700;">FREE</span>
+        </div>
+        <div class="total-row">
+          <span>Payment Method</span>
+          <span id="rec-payment" style="font-weight:700;">--</span>
+        </div>
+        <div class="total-row grand-total">
+          <span>TOTAL</span>
+          <span id="rec-total">₱0.00</span>
+        </div>
+      </div>
+
+      <!-- Simulated Barcode -->
+      <div class="receipt-barcode" id="rec-barcode">||||| | |||| || ||| ||||</div>
+
+      <!-- Footer Pickup Note -->
+      <div class="receipt-footer-note">
+        <i class="fa-solid fa-bell" style="color:var(--swatch-caramel)"></i>
+        Present this slip or Order Number at the pick-up counter when claiming your meal.
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="receipt-actions no-print">
+      <button class="btn btn-secondary btn-block" onclick="window.print()" title="Print receipt or save as PDF">
+        <i class="fa-solid fa-print"></i> Print
+      </button>
+      <button class="btn btn-primary btn-block" onclick="closeReceiptModal()">
+        <i class="fa-solid fa-check"></i> Close
+      </button>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MY_ID   = '{{ user.username }}';
+const MY_NAME = '{{ user.full_name }}';
+let allOrders = [];
+
+const STATUS_BADGE = {
+  'Waiting':    'badge-amber',
+  'Processing': 'badge-blue',
+  'To Pickup':  'badge-purple',
+  'Completed':  'badge-green',
+  'Cancelled':  'badge-red',
+};
+const STEPS = ['Waiting','Processing','To Pickup','Completed'];
+
+async function loadOrders() {
+  const data = await api(`/api/orders?student_id=${encodeURIComponent(MY_ID)}&role=customer`);
+  if (!data.success) return;
+  allOrders = data.data || [];
+  renderActiveTracker();
+  applyFilter();
+}
+
+function renderActiveTracker() {
+  const active = allOrders.find(o => ['Waiting','Processing','To Pickup'].includes(o.status));
+  const section = document.getElementById('active-section');
+  if (!active) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  const idx = STEPS.indexOf(active.status);
+  document.getElementById('active-tracker').innerHTML = STEPS.map((s, i) => {
+    const cls = i < idx ? 'pt-step done' : i === idx ? 'pt-step active' : 'pt-step';
+    return `<div class="${cls}"><div class="pt-dot">${i < idx ? '<i class="fa-solid fa-check"></i>' : i+1}</div><div class="pt-label">${s}</div></div>`;
+  }).join('');
+  const items = (active.items || []).map(i => `${i.name} ×${i.qty}`).join(', ');
+  document.getElementById('active-detail').innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <div>
+        <strong>${active.order_number}</strong> &nbsp;·&nbsp; ${items}
+        &nbsp;·&nbsp; <strong>${peso(active.total)}</strong>
+        &nbsp;·&nbsp; <span class="badge ${STATUS_BADGE[active.status]}">${active.status}</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="openOrderReceipt('${active.order_number}')">
+        <i class="fa-solid fa-receipt"></i> View Receipt
+      </button>
+    </div>`;
+}
+
+function applyFilter() {
+  const f  = document.getElementById('status-filter').value;
+  const filtered = f ? allOrders.filter(o => o.status === f) : allOrders;
+  renderOrders(filtered);
+}
+
+function renderOrders(orders) {
+  const list = document.getElementById('orders-list');
+  if (!orders.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h4>No orders yet</h4><p>Place your first order from the menu.</p></div>`;
+    return;
+  }
+  list.innerHTML = orders.map(o => {
+    const items = (o.items || []).map(i => `${i.emoji || '🍲'} ${i.name} ×${i.qty}`).join('  ·  ');
+    return `
+    <div class="order-card">
+      <div class="order-card-header">
+        <div>
+          <div class="order-num">${o.order_number}</div>
+          <div class="order-time">${o.created_at || ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span class="badge ${STATUS_BADGE[o.status] || 'badge-gray'}">${o.status}</span>
+          <span class="badge ${o.payment_status === 'Paid' ? 'badge-green' : 'badge-amber'}">${o.payment_status}</span>
+        </div>
+      </div>
+      <div class="order-items">${items}</div>
+      <div class="order-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div class="order-total">${peso(o.total)}</div>
+          <span style="font-size:.75rem;color:var(--text-3)">${o.payment_method}</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="openOrderReceipt('${o.order_number}')">
+          <i class="fa-solid fa-receipt"></i> Receipt
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openOrderReceipt(orderNum) {
+  const order = allOrders.find(o => o.order_number === orderNum);
+  if (!order) return;
+
+  document.getElementById('rec-order-num').textContent = order.order_number;
+  document.getElementById('rec-date-time').textContent = order.created_at || new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  document.getElementById('rec-customer').textContent = order.customer_name || MY_NAME || MY_ID;
+  document.getElementById('rec-status').textContent = `${order.status} (${order.payment_status})`;
+  document.getElementById('rec-payment').textContent = order.payment_method;
+
+  const tbody = document.getElementById('rec-items-tbody');
+  tbody.innerHTML = (order.items || []).map(i => `
+    <tr>
+      <td>
+        <span style="font-weight:700; color:#0f172a;">${i.emoji || '🍲'} ${i.name}</span>
+        <div style="font-size:11px; color:#64748b;">${i.qty || 1} × ${peso(i.price)}</div>
+      </td>
+      <td>${peso(i.price * (i.qty || 1))}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('rec-subtotal').textContent = peso(order.total);
+  document.getElementById('rec-total').textContent = peso(order.total);
+  document.getElementById('rec-barcode').textContent = `* ${order.order_number} *`;
+
+  document.getElementById('digital-receipt-modal').style.display = 'flex';
+}
+
+function closeReceiptModal() {
+  document.getElementById('digital-receipt-modal').style.display = 'none';
+}
+
+loadOrders();
+setInterval(loadOrders, 20000); // auto-refresh every 20s
+</script>
+{% endblock %}

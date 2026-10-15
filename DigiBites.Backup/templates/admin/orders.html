@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block page_title %}Orders Queue (Live FIFO){% endblock %}
+{% block topbar_title %}Orders Queue{% endblock %}
+
+{% block content %}
+<div class="page-header" style="flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h1 style="margin:0">Orders Queue</h1>
+      <span class="live-sync-indicator" id="sync-indicator">
+        <span class="live-sync-dot"></span>
+        <span>Live Sync Active</span>
+        <span style="opacity:0.75" id="sync-timestamp">· Just now</span>
+      </span>
+    </div>
+    <p style="margin-top:4px;color:var(--text-muted)">Real-time kitchen & pick-up queue with dynamic FIFO re-indexing</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-secondary btn-sm" onclick="syncOrders(true)" id="refresh-btn">
+      <i class="fa-solid fa-rotate-right"></i> Refresh Now
+    </button>
+  </div>
+</div>
+
+<!-- Primary View Selector (Active FIFO Queue vs History Archive) -->
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+  <div class="nav-tabs-clean" style="margin:0">
+    <button class="nav-tab-clean active" id="tab-active-queue" onclick="switchView('active')">
+      <i class="fa-solid fa-fire-flame-curved"></i> Active Queue (FIFO)
+      <span class="badge badge-amber" id="badge-active-count" style="margin-left:6px">0</span>
+    </button>
+    <button class="nav-tab-clean" id="tab-completed-archive" onclick="switchView('archive')">
+      <i class="fa-solid fa-box-archive"></i> Completed & Archive
+    </button>
+  </div>
+
+  <!-- Canteen Location Selector -->
+  <div class="canteen-toggle-group" style="margin:0">
+    <button class="canteen-toggle-btn active" onclick="setCanteenFilter('')" id="canteen-filter-all">
+      <i class="fa-solid fa-layer-group"></i> All Canteens
+    </button>
+    <button class="canteen-toggle-btn" onclick="setCanteenFilter('SHS')" id="canteen-filter-shs">
+      <i class="fa-solid fa-building"></i> SHS Canteen
+    </button>
+    <button class="canteen-toggle-btn" onclick="setCanteenFilter('JHS')" id="canteen-filter-jhs">
+      <i class="fa-solid fa-school"></i> JHS Canteen
+    </button>
+  </div>
+</div>
+
+<!-- Active Queue FIFO Summary Banner -->
+<div id="fifo-summary-box" class="card" style="padding:14px 18px;margin-bottom:16px;background:linear-gradient(135deg,rgba(217,119,6,0.08),rgba(245,158,11,0.04));border:1px solid rgba(217,119,6,0.2)">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:40px;height:40px;border-radius:10px;background:var(--swatch-honey);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700">
+        <i class="fa-solid fa-arrow-down-1-9"></i>
+      </div>
+      <div>
+        <div style="font-weight:700;color:var(--text);font-size:0.95rem">Dynamic FIFO Queue Automation</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)">
+          Orders advance sequentially. Once completed & paid, orders leave the active list and downstream orders automatically re-number.
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap" id="status-filter-pills">
+      <button class="filter-pill active" onclick="filterQueue(this, '')">All Active (<span id="cnt-total">0</span>)</button>
+      <button class="filter-pill" onclick="filterQueue(this, 'Waiting')">⏳ Waiting (<span id="cnt-waiting">0</span>)</button>
+      <button class="filter-pill" onclick="filterQueue(this, 'Processing')">⚙️ Processing (<span id="cnt-processing">0</span>)</button>
+      <button class="filter-pill" onclick="filterQueue(this, 'To Pickup')">🔔 Ready (<span id="cnt-ready">0</span>)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order Cards Container -->
+<div id="order-queue">
+  <div class="loading-box"><div class="spinner"></div><p style="margin-top:10px">Synchronizing order queue…</p></div>
+</div>
+
+<!-- Student Profile Modal -->
+<div id="student-profile-modal" class="receipt-modal-backdrop" onclick="if(event.target === this) closeStudentProfile()">
+  <div class="card student-profile-card" role="dialog" aria-modal="true" aria-labelledby="student-profile-title">
+    <div class="card-header">
+      <h3 id="student-profile-title"><i class="fa-solid fa-user-graduate"></i> Student Profile</h3>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="closeStudentProfile()" aria-label="Close profile">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <dl id="student-profile-fields" class="student-profile-fields"></dl>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentView = 'active'; // 'active' or 'archive'
+let activeOrders = [];      // FIFO list of active orders
+let archiveOrders = [];     // Completed/cancelled orders
+let activeStatusFilter = '';
+let activeCanteenFilter = '';
+let syncTimer = null;
+let isUpdating = false;
+
+const STATUS_BADGE = {
+  'Waiting':    'badge-amber',
+  'Processing': 'badge-blue',
+  'To Pickup':  'badge-purple',
+  'Completed':  'badge-green',
+  'Cancelled':  'badge-red',
+};
+
+function switchView(view) {
+  currentView = view;
+  document.getElementById('tab-active-queue').classList.toggle('active', view === 'active');
+  document.getElementById('tab-completed-archive').classList.toggle('active', view === 'archive');
+  document.getElementById('fifo-summary-box').style.display = view === 'active' ? 'block' : 'none';
+  syncOrders(true);
+}
+
+function setCanteenFilter(canteen) {
+  activeCanteenFilter = canteen;
+  document.getElementById('canteen-filter-all').classList.toggle('active', canteen === '');
+  document.getElementById('canteen-filter-shs').classList.toggle('active', canteen === 'SHS');
+  document.getElementById('canteen-filter-jhs').classList.toggle('active', canteen === 'JHS');
+  renderQueue();
+}
+
+function filterQueue(btn, status) {
+  activeStatusFilter = status;
+  document.querySelectorAll('#status-filter-pills .filter-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderQueue();
+}
+
+// Fetch orders with live real-time sync
+async function syncOrders(manual = false) {
+  if (isUpdating && !manual) return;
+  const syncTimestampEl = document.getElementById('sync-timestamp');
+
+  try {
+    if (currentView === 'active') {
+      const res = await api('/api/orders/live-queue');
+      if (res && res.success) {
+        activeOrders = res.data || [];
+        updateCounts(res.counts);
+      }
+    } else {
+      const res = await api('/api/orders?status=Completed');
+      if (res && res.success) {
+        archiveOrders = res.data || [];
+      }
+    }
+
+    const now = new Date();
+    syncTimestampEl.textContent = `· Synced ${now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })}`;
+    renderQueue();
+  } catch (err) {
+    console.error('Queue sync error:', err);
+  }
+}
+
+function updateCounts(counts) {
+  if (!counts) {
+    counts = {
+      total_active: activeOrders.length,
+      waiting_count: activeOrders.filter(o => o.status === 'Waiting').length,
+      processing_count: activeOrders.filter(o => o.status === 'Processing').length,
+      ready_count: activeOrders.filter(o => o.status === 'To Pickup').length,
+    };
+  }
+  document.getElementById('badge-active-count').textContent = counts.total_active || 0;
+  document.getElementById('cnt-total').textContent = counts.total_active || 0;
+  document.getElementById('cnt-waiting').textContent = counts.waiting_count || 0;
+  document.getElementById('cnt-processing').textContent = counts.processing_count || 0;
+  document.getElementById('cnt-ready').textContent = counts.ready_count || 0;
+}
+
+function renderQueue() {
+  const el = document.getElementById('order-queue');
+  const sourceList = (currentView === 'active') ? activeOrders : archiveOrders;
+
+  // Filter by status if in active view
+  let filtered = sourceList;
+  if (currentView === 'active' && activeStatusFilter) {
+    filtered = filtered.filter(o => o.status === activeStatusFilter);
+  }
+
+  // Filter by canteen if specified
+  if (activeCanteenFilter) {
+    filtered = filtered.filter(o => {
+      if (o.canteen_location && o.canteen_location === activeCanteenFilter) return true;
+      if (o.canteen && o.canteen === activeCanteenFilter) return true;
+      if (o.items && o.items.some(i => i.canteen === activeCanteenFilter || i.canteen_location === activeCanteenFilter)) return true;
+      return false;
+    });
+  }
+
+  if (!filtered.length) {
+    if (currentView === 'active') {
+      el.innerHTML = `
+        <div class="empty-state" style="padding:48px 20px">
+          <div class="empty-icon" style="font-size:2.8rem">🎉</div>
+          <h3 style="margin:8px 0">Queue is Clear!</h3>
+          <p style="color:var(--text-muted);max-width:380px;margin:0 auto">All orders have been prepared, completed, and served. New student pre-orders will appear here in real-time.</p>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div class="empty-state" style="padding:48px 20px">
+          <div class="empty-icon" style="font-size:2.8rem">📦</div>
+          <h3 style="margin:8px 0">No Archived Orders Found</h3>
+          <p style="color:var(--text-muted)">Completed orders will appear in this history tab.</p>
+        </div>`;
+    }
+    return;
+  }
+
+  // Dynamically re-index in FIFO order for the active queue!
+  el.innerHTML = filtered.map((o, idx) => {
+    // If active view, compute dynamic FIFO queue position
+    const fifoIndex = (currentView === 'active') ? (idx + 1) : null;
+    let badgeClass = 'pos-later';
+    if (fifoIndex === 1) badgeClass = 'pos-1';
+    else if (fifoIndex === 2) badgeClass = 'pos-2';
+    else if (fifoIndex === 3) badgeClass = 'pos-3';
+
+    // Determine canteen badge
+    let canteenBadge = '';
+    const canteenVal = o.canteen_location || o.canteen || (o.items && o.items[0]?.canteen) || '';
+    if (canteenVal === 'SHS') {
+      canteenBadge = `<span class="badge" style="background:#e0e7ff;color:#3730a3;font-weight:700"><i class="fa-solid fa-building"></i> SHS Canteen</span>`;
+    } else if (canteenVal === 'JHS') {
+      canteenBadge = `<span class="badge" style="background:#ecfdf5;color:#065f46;font-weight:700"><i class="fa-solid fa-school"></i> JHS Canteen</span>`;
+    }
+
+    const items = (o.items || []).map(i => {
+      const loc = i.canteen ? ` <small style="opacity:0.7">(${i.canteen})</small>` : '';
+      return `<span>${i.emoji || '🍲'} ${i.name}${loc} <strong>×${i.qty}</strong></span>`;
+    }).join('  ');
+
+    return `
+    <div class="order-card" id="order-card-${o.order_id}" style="transition:all 0.3s ease">
+      <div class="order-card-header">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          ${currentView === 'active' ? `
+            <div class="queue-pos-badge ${badgeClass}" title="Dynamic FIFO Queue Position">
+              #${fifoIndex} in Queue
+            </div>
+          ` : ''}
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="order-num" style="font-size:1.1rem">${o.order_number}</span>
+              ${canteenBadge}
+            </div>
+            <div class="order-time" style="margin-top:3px">
+              👤 <strong>${o.customer_name || 'Customer'}</strong> · 
+              <span style="opacity:0.85">${o.created_at || ''}</span>
+            </div>
+            ${o.student_profile ? `
+              <button class="btn btn-ghost btn-sm" type="button" style="padding:2px 8px;margin-top:4px" onclick="viewStudentProfile(${o.order_id})">
+                <i class="fa-solid fa-address-card"></i> View Student Profile
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="badge ${STATUS_BADGE[o.status] || 'badge-gray'}">${o.status}</span>
+          <span class="badge ${o.payment_status === 'Paid' ? 'badge-green' : 'badge-amber'}">${o.payment_status}</span>
+        </div>
+      </div>
+
+      <div class="order-items" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px">
+        ${items}
+      </div>
+
+      <div class="order-footer">
+        <div>
+          <div class="order-total" style="font-size:1.15rem">${peso(o.total)}</div>
+          <small style="color:var(--text-muted)">Method: ${o.payment_method || 'Cash'}</small>
+        </div>
+        <div class="order-actions">
+          ${o.status === 'Waiting' ? `
+            <button class="btn btn-secondary btn-sm" onclick="advanceOrder(${o.order_id}, 'Processing', null)">
+              <i class="fa-solid fa-play"></i> Start Prep
+            </button>
+          ` : ''}
+          ${o.status === 'Processing' ? `
+            <button class="btn btn-warning btn-sm" onclick="advanceOrder(${o.order_id}, 'To Pickup', null)">
+              <i class="fa-solid fa-bell"></i> Ready for Pickup
+            </button>
+          ` : ''}
+          ${o.status === 'To Pickup' || currentView === 'active' ? `
+            <button class="btn btn-primary btn-sm" onclick="completeAndReindex(${o.order_id})">
+              <i class="fa-solid fa-check-double"></i> Complete & Paid
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Dynamic FIFO Re-indexing: Completed & paid orders disappear immediately from the active queue
+// and remaining orders shift up (#2 becomes #1, #3 becomes #2...)
+async function completeAndReindex(orderId) {
+  if (isUpdating) return;
+  isUpdating = true;
+
+  // 1. Instantly apply optimistic removal from the local active queue
+  const targetIndex = activeOrders.findIndex(o => o.order_id === orderId);
+  let removedOrder = null;
+  if (targetIndex !== -1) {
+    removedOrder = activeOrders[targetIndex];
+    activeOrders.splice(targetIndex, 1); // Remove from active list
+
+    // Visually re-render instantly with dynamic FIFO re-numbering
+    renderQueue();
+    updateCounts();
+    toast(`Order #${removedOrder.order_number} completed & paid! Queue shifted forward.`, 'success');
+  }
+
+  // 2. Transmit status update to backend in real time
+  try {
+    const payload = { status: 'Completed', payment_status: 'Paid' };
+    const res = await api(`/api/orders/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+
+    if (!res || !res.success) {
+      toast(res?.message || 'Server error while updating order status.', 'error');
+      // If server failed, rollback and reload
+      await syncOrders(true);
+    }
+  } catch (err) {
+    console.error('Update status failed:', err);
+    toast('Network error updating order status.', 'error');
+    await syncOrders(true);
+  } finally {
+    isUpdating = false;
+  }
+}
+
+// Advance status without removing from queue
+async function advanceOrder(orderId, status, payment) {
+  const payload = { status };
+  if (payment) payload.payment_status = payment;
+
+  // Optimistic update in activeOrders
+  const item = activeOrders.find(o => o.order_id === orderId);
+  if (item) {
+    item.status = status;
+    if (payment) item.payment_status = payment;
+    renderQueue();
+    updateCounts();
+  }
+
+  const res = await api(`/api/orders/${orderId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+
+  if (res && res.success) {
+    toast(`Order updated to ${status}.`, 'info');
+  } else {
+    toast(res?.message || 'Failed to update order.', 'error');
+    syncOrders(true);
+  }
+}
+
+function viewStudentProfile(orderId) {
+  const list = (currentView === 'active') ? activeOrders : archiveOrders;
+  const order = list.find(item => item.order_id === orderId);
+  if (!order || !order.student_profile) {
+    toast('No registered student profile is linked to this order.', 'warning');
+    return;
+  }
+
+  const profile = order.student_profile;
+  const fields = [
+    ['Full name', profile.full_name],
+    ['Email / Username', profile.email],
+    ['Phone', profile.phone],
+    ['Grade Level', profile.grade ? `Grade ${profile.grade}` : ''],
+    ['Section', profile.section],
+    ['LRN', profile.lrn],
+    ['Account verification', profile.verification_status],
+  ];
+  const container = document.getElementById('student-profile-fields');
+  container.replaceChildren();
+  fields.forEach(([label, value]) => {
+    const entry = document.createElement('div');
+    const term = document.createElement('dt');
+    const description = document.createElement('dd');
+    term.textContent = label;
+    description.textContent = value || 'Not provided';
+    entry.append(term, description);
+    container.appendChild(entry);
+  });
+  document.getElementById('student-profile-modal').style.display = 'flex';
+}
+
+function closeStudentProfile() {
+  document.getElementById('student-profile-modal').style.display = 'none';
+}
+
+// Initial sync and real-time short-polling interval (every 3 seconds for instant multi-terminal sync)
+syncOrders(true);
+syncTimer = setInterval(() => syncOrders(false), 3000);
+</script>
+{% endblock %}

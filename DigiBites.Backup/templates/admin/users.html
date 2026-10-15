@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+{% block page_title %}User Management & Directory{% endblock %}
+{% block topbar_title %}User Management{% endblock %}
+
+{% block content %}
+<div class="page-header" style="flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="margin:0">User Directory & Management</h1>
+    <p style="margin-top:4px;color:var(--text-muted)">Manage verified student/customer accounts and staff administrative privileges.</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-secondary btn-sm" onclick="refreshCurrentTab()" id="btn-refresh">
+      <i class="fa-solid fa-rotate-right"></i> Refresh
+    </button>
+    <button class="btn btn-primary btn-sm" type="button" onclick="openUserModal()" id="btn-add-staff" style="display:none">
+      <i class="fa-solid fa-user-plus"></i> Add Staff User
+    </button>
+  </div>
+</div>
+
+<!-- Prominent Summary Metrics Cards -->
+<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-bottom:20px">
+  <!-- Active Users Card (Prominent Metric) -->
+  <div class="stat-card" style="background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(5,150,105,0.04));border:1px solid rgba(16,185,129,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="stat-label" style="font-weight:700;color:#065f46">Active Website Users</div>
+        <div class="stat-value" id="metric-online" style="color:#047857;display:flex;align-items:center;gap:8px">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,0.3)"></span>
+          <span>0</span>
+        </div>
+      </div>
+      <div style="width:42px;height:42px;border-radius:12px;background:#10b981;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+        <i class="fa-solid fa-signal"></i>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">Active sessions currently on the platform</div>
+  </div>
+
+  <!-- Approved Non-Admin Accounts -->
+  <div class="stat-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="stat-label">Approved Students</div>
+        <div class="stat-value" id="metric-approved">0</div>
+      </div>
+      <div style="width:42px;height:42px;border-radius:12px;background:rgba(217,119,6,0.15);color:var(--swatch-honey);display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+        <i class="fa-solid fa-user-graduate"></i>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">Verified non-admin customer accounts</div>
+  </div>
+
+  <!-- Pending Approvals -->
+  <div class="stat-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="stat-label">Pending Verification</div>
+        <div class="stat-value" id="metric-pending" style="color:#d97706">0</div>
+      </div>
+      <div style="width:42px;height:42px;border-radius:12px;background:rgba(245,158,11,0.15);color:#d97706;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+        <i class="fa-solid fa-user-clock"></i>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;margin-top:6px">
+      <a href="/admin/student-verifications" style="color:var(--swatch-honey);text-decoration:none;font-weight:600">Review verifications →</a>
+    </div>
+  </div>
+
+  <!-- Staff Accounts -->
+  <div class="stat-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="stat-label">Staff & Admin</div>
+        <div class="stat-value" id="metric-staff">0</div>
+      </div>
+      <div style="width:42px;height:42px;border-radius:12px;background:rgba(99,102,241,0.15);color:#4f46e5;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+        <i class="fa-solid fa-users-gear"></i>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px">Canteen management operators</div>
+  </div>
+</div>
+
+<!-- Navigation Tabs: Non-Admin Directory vs Staff Accounts -->
+<div class="nav-tabs-clean" style="margin-bottom:16px">
+  <button class="nav-tab-clean active" id="tab-btn-non-admin" onclick="switchDirectoryTab('non-admin')">
+    <i class="fa-solid fa-address-book"></i> Non-Admin Account Directory
+    <span class="badge badge-amber" id="badge-non-admin-count" style="margin-left:6px">0</span>
+  </button>
+  <button class="nav-tab-clean" id="tab-btn-staff" onclick="switchDirectoryTab('staff')">
+    <i class="fa-solid fa-users-gear"></i> Staff & Admin Accounts
+    <span class="badge badge-gray" id="badge-staff-count" style="margin-left:6px">0</span>
+  </button>
+</div>
+
+<!-- SECTION 1: Non-Admin Customer Directory -->
+<div id="section-non-admin">
+  <div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:12px;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h3 style="margin:0"><i class="fa-solid fa-user-graduate"></i> Approved Non-Admin Accounts</h3>
+      </div>
+      <!-- Search & Filters -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="position:relative;width:240px">
+          <input type="text" id="student-search-input" class="form-control form-control-sm" placeholder="Search name, LRN, email…" oninput="filterCustomerTable()" style="padding-left:32px">
+          <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:0.85rem"></i>
+        </div>
+        <select id="grade-filter-select" class="form-control form-control-sm" onchange="filterCustomerTable()" style="width:140px">
+          <option value="">All Grades</option>
+          <option value="7">Grade 7</option>
+          <option value="8">Grade 8</option>
+          <option value="9">Grade 9</option>
+          <option value="10">Grade 10</option>
+          <option value="11">Grade 11 (SHS)</option>
+          <option value="12">Grade 12 (SHS)</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadCustomerUsers()" title="Reload user directory">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Full Name / Username</th>
+            <th>Email Address</th>
+            <th>Student / LRN ID</th>
+            <th>Grade & Section</th>
+            <th>Account Status</th>
+            <th>Activity Status</th>
+            <th>Registration Date</th>
+          </tr>
+        </thead>
+        <tbody id="customer-users-body">
+          <tr><td colspan="7" class="loading-box"><div class="spinner" style="margin:0 auto"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 2: Staff & Admin Accounts -->
+<div id="section-staff" style="display:none">
+  <div class="card">
+    <div class="card-header">
+      <h3 style="margin:0"><i class="fa-solid fa-users-gear"></i> Staff Accounts</h3>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="loadAdminUsers()" aria-label="Refresh staff accounts">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Full Name</th>
+            <th>Gmail / Username</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="admin-users-body">
+          <tr><td colspan="4" class="loading-box"><div class="spinner" style="margin:0 auto"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Staff Modal -->
+<div id="admin-user-modal" class="receipt-modal-backdrop" onclick="if(event.target === this) closeUserModal()">
+  <div class="card admin-user-form-card" role="dialog" aria-modal="true" aria-labelledby="admin-user-modal-title">
+    <div class="card-header">
+      <h3 id="admin-user-modal-title">Add Staff User</h3>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="closeUserModal()" aria-label="Close form">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <form id="admin-user-form" onsubmit="saveAdminUser(event)" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="staff-full-name">Full Name</label>
+        <input id="staff-full-name" class="form-control" type="text" maxlength="100" autocomplete="name" required>
+        <div class="error-msg" id="staff-name-error"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="staff-email">Gmail / Login</label>
+        <input id="staff-email" class="form-control" type="email" maxlength="50" autocomplete="email" required>
+        <div class="error-msg" id="staff-email-error"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="staff-password">Password</label>
+        <input id="staff-password" class="form-control" type="password" minlength="8" maxlength="100" autocomplete="new-password">
+        <small id="staff-password-hint" class="form-help">At least 8 characters.</small>
+        <div class="error-msg" id="staff-password-error"></div>
+      </div>
+      <div class="admin-user-form-actions">
+        <button class="btn btn-secondary" type="button" onclick="closeUserModal()">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="btn-save-staff">
+          <i class="fa-solid fa-floppy-disk"></i> Create Account
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CURRENT_ADMIN_ID = {{ user.id|tojson }};
+let currentTab = 'non-admin';
+let customerUsers = [];
+let adminUsers = [];
+let editingAdminId = null;
+
+function switchDirectoryTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-btn-non-admin').classList.toggle('active', tab === 'non-admin');
+  document.getElementById('tab-btn-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('section-non-admin').style.display = tab === 'non-admin' ? 'block' : 'none';
+  document.getElementById('section-staff').style.display = tab === 'staff' ? 'block' : 'none';
+  document.getElementById('btn-add-staff').style.display = tab === 'staff' ? 'inline-flex' : 'none';
+
+  if (tab === 'non-admin') loadCustomerUsers();
+  else loadAdminUsers();
+}
+
+function refreshCurrentTab() {
+  if (currentTab === 'non-admin') loadCustomerUsers();
+  else loadAdminUsers();
+}
+
+// -------------------------------------------------------------
+// Non-Admin Customer Users Directory
+// -------------------------------------------------------------
+async function loadCustomerUsers() {
+  const tbody = document.getElementById('customer-users-body');
+  try {
+    const res = await api('/api/admin/customer-users');
+    if (!res || !res.success) {
+      tbody.innerHTML = `<tr><td colspan="7" class="loading-box" style="color:var(--swatch-caramel)">${res?.message || 'Could not load users.'}</td></tr>`;
+      return;
+    }
+
+    // Update Metrics
+    const metrics = res.metrics || {};
+    document.querySelector('#metric-online span:last-child').textContent = metrics.online_count || 0;
+    document.getElementById('metric-approved').textContent = metrics.active_count || 0;
+    document.getElementById('metric-pending').textContent = metrics.pending_count || 0;
+    document.getElementById('metric-staff').textContent = metrics.staff_count || 0;
+    document.getElementById('badge-non-admin-count').textContent = metrics.active_count || 0;
+    document.getElementById('badge-staff-count').textContent = metrics.staff_count || 0;
+
+    customerUsers = res.data || [];
+    renderCustomerTable(customerUsers);
+  } catch (err) {
+    console.error('Failed to fetch customer users:', err);
+    tbody.innerHTML = `<tr><td colspan="7" class="loading-box">Could not load users. Please try again.</td></tr>`;
+  }
+}
+
+function filterCustomerTable() {
+  const query = (document.getElementById('student-search-input').value || '').trim().toLowerCase();
+  const grade = (document.getElementById('grade-filter-select').value || '').trim();
+
+  const filtered = customerUsers.filter(u => {
+    const matchQuery = !query ||
+      (u.full_name && u.full_name.toLowerCase().includes(query)) ||
+      (u.username && u.username.toLowerCase().includes(query)) ||
+      (u.email && u.email.toLowerCase().includes(query)) ||
+      (u.student_id && u.student_id.toLowerCase().includes(query)) ||
+      (u.lrn && u.lrn.toLowerCase().includes(query));
+
+    const matchGrade = !grade || String(u.grade_level || '') === grade;
+
+    return matchQuery && matchGrade;
+  });
+
+  renderCustomerTable(filtered);
+}
+
+function renderCustomerTable(users) {
+  const tbody = document.getElementById('customer-users-body');
+  if (!users || !users.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align:center;padding:36px;color:var(--text-muted)">
+          <div style="font-size:2rem;margin-bottom:8px">👥</div>
+          <div style="font-weight:600">No matching approved users found</div>
+          <div style="font-size:0.85rem">Only verified non-admin customer/student accounts appear in this directory.</div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => {
+    const onlineBadge = u.is_online
+      ? `<span class="badge" style="background:#d1fae5;color:#065f46;font-size:0.75rem;padding:2px 8px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin-right:4px"></span>Online Now</span>`
+      : `<span style="font-size:0.78rem;color:var(--text-muted)">${u.last_active_at ? 'Active ' + u.last_active_at : 'Offline'}</span>`;
+
+    const gradeSection = (u.grade_level || u.section)
+      ? `Grade ${u.grade_level || '—'} · ${u.section || '—'}`
+      : '<span style="color:var(--text-muted)">—</span>';
+
+    const lrnDisplay = u.lrn || u.student_id || '<span style="color:var(--text-muted)">—</span>';
+
+    return `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--swatch-caramel),var(--swatch-espresso));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem">
+              ${(u.full_name || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style="font-weight:600;color:var(--text)">${u.full_name || 'Unnamed Student'}</div>
+              <div style="font-size:0.78rem;color:var(--text-muted)">@${u.username || 'user'}</div>
+            </div>
+          </div>
+        </td>
+        <td><a href="mailto:${u.email || ''}" style="color:inherit;text-decoration:none">${u.email || '—'}</a></td>
+        <td><strong style="font-family:monospace;letter-spacing:0.5px">${lrnDisplay}</strong></td>
+        <td>${gradeSection}</td>
+        <td>
+          <span class="badge badge-green" style="font-weight:700">
+            <i class="fa-solid fa-check"></i> Approved
+          </span>
+        </td>
+        <td>${onlineBadge}</td>
+        <td style="font-size:0.82rem;color:var(--text-muted)">${u.created_at || '—'}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// -------------------------------------------------------------
+// Staff & Admin Accounts Management
+// -------------------------------------------------------------
+async function loadAdminUsers() {
+  const body = document.getElementById('admin-users-body');
+  body.replaceChildren();
+  try {
+    const result = await api('/api/auth/admin/users');
+    if (!result.success) {
+      setUsersMessage(result.message || 'Could not load staff accounts.');
+      return;
+    }
+    adminUsers = result.data || [];
+    document.getElementById('badge-staff-count').textContent = adminUsers.length;
+    document.getElementById('metric-staff').textContent = adminUsers.length;
+
+    if (!adminUsers.length) {
+      setUsersMessage('No staff accounts found.');
+      return;
+    }
+
+    adminUsers.forEach(user => {
+      const row = document.createElement('tr');
+      appendUserCell(row, user.full_name);
+      appendUserCell(row, user.email);
+      appendUserCell(row, user.created_at || '');
+
+      const actions = document.createElement('td');
+      actions.className = 'admin-user-actions';
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'btn btn-secondary btn-sm';
+      editButton.innerHTML = '<i class="fa-solid fa-pen"></i> Edit';
+      editButton.addEventListener('click', () => openUserModal(user));
+      actions.appendChild(editButton);
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'btn btn-danger btn-sm';
+      deleteButton.innerHTML = '<i class="fa-solid fa-trash"></i> Delete';
+      deleteButton.disabled = user.id === CURRENT_ADMIN_ID;
+      deleteButton.title = deleteButton.disabled ? 'You cannot delete your signed-in account.' : 'Delete staff account';
+      deleteButton.addEventListener('click', () => deleteAdminUser(user));
+      actions.appendChild(deleteButton);
+      row.appendChild(actions);
+      body.appendChild(row);
+    });
+  } catch (_error) {
+    setUsersMessage('Could not load staff accounts. Please try again.');
+  }
+}
+
+function appendUserCell(row, value) {
+  const cell = document.createElement('td');
+  cell.textContent = value || '—';
+  row.appendChild(cell);
+}
+
+function setUsersMessage(message) {
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = 4;
+  cell.className = 'loading-box';
+  cell.textContent = message;
+  row.appendChild(cell);
+  document.getElementById('admin-users-body').replaceChildren(row);
+}
+
+function openUserModal(user = null) {
+  editingAdminId = user ? user.id : null;
+  document.getElementById('admin-user-form').reset();
+  document.getElementById('staff-full-name').value = user?.full_name || '';
+  const emailInput = document.getElementById('staff-email');
+  const legacyLogin = Boolean(user && !/^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(user.email));
+  emailInput.type = legacyLogin ? 'text' : 'email';
+  emailInput.readOnly = legacyLogin;
+  emailInput.title = legacyLogin ? 'Legacy login names cannot be changed here.' : '';
+  emailInput.value = user?.email || '';
+  document.getElementById('staff-password').required = !user;
+  document.getElementById('staff-password-hint').textContent = user
+    ? 'Leave blank to keep the current password.'
+    : 'At least 8 characters.';
+  document.getElementById('admin-user-modal-title').textContent = user ? 'Edit Staff User' : 'Add Staff User';
+  document.getElementById('btn-save-staff').innerHTML = user
+    ? '<i class="fa-solid fa-floppy-disk"></i> Save Changes'
+    : '<i class="fa-solid fa-user-plus"></i> Create Account';
+  document.querySelectorAll('.error-msg').forEach(error => { error.textContent = ''; });
+  document.getElementById('admin-user-modal').style.display = 'flex';
+  document.getElementById('staff-full-name').focus();
+}
+
+function closeUserModal() {
+  document.getElementById('admin-user-modal').style.display = 'none';
+}
+
+async function saveAdminUser(event) {
+  event.preventDefault();
+  const fullName = document.getElementById('staff-full-name').value.trim();
+  const email = document.getElementById('staff-email').value.trim();
+  const password = document.getElementById('staff-password').value;
+  const errors = {};
+  if (fullName.length < 2) errors['staff-name-error'] = 'Enter the staff member’s full name.';
+  const legacyLoginUnchanged = editingAdminId && document.getElementById('staff-email').readOnly;
+  if (!legacyLoginUnchanged && !/^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email)) {
+    errors['staff-email-error'] = 'Enter a valid @gmail.com address.';
+  }
+  if ((!editingAdminId || password) && password.length < 8) errors['staff-password-error'] = 'Password must be at least 8 characters.';
+
+  document.querySelectorAll('.error-msg').forEach(error => { error.textContent = ''; });
+  for (const [id, message] of Object.entries(errors)) document.getElementById(id).textContent = message;
+  if (Object.keys(errors).length) return;
+
+  const payload = { full_name: fullName, email };
+  if (password) payload.password = password;
+  const saveButton = document.getElementById('btn-save-staff');
+  saveButton.disabled = true;
+  try {
+    const result = await api(editingAdminId ? `/api/auth/admin/users/${editingAdminId}` : '/api/auth/admin/users', {
+      method: editingAdminId ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!result.success) {
+      if (result.errors?.email) document.getElementById('staff-email-error').textContent = result.errors.email;
+      else if (result.errors?.full_name) document.getElementById('staff-name-error').textContent = result.errors.full_name;
+      else if (result.errors?.password) document.getElementById('staff-password-error').textContent = result.errors.password;
+      else toast(result.message || 'Could not save staff account.', 'error');
+      return;
+    }
+    toast(result.message, 'success');
+    closeUserModal();
+    await loadAdminUsers();
+  } catch (_error) {
+    toast('Could not save staff account. Please try again.', 'error');
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
+async function deleteAdminUser(user) {
+  if (!window.confirm(`Delete staff account for ${user.full_name} (${user.email})?`)) return;
+  try {
+    const result = await api(`/api/auth/admin/users/${user.id}`, { method: 'DELETE' });
+    if (!result.success) {
+      toast(result.message || 'Could not delete staff account.', 'error');
+      return;
+    }
+    toast(result.message, 'success');
+    await loadAdminUsers();
+  } catch (_error) {
+    toast('Could not delete staff account. Please try again.', 'error');
+  }
+}
+
+// Initial load
+loadCustomerUsers();
+</script>
+{% endblock %}

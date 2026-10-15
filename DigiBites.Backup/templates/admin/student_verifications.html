@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block page_title %}Student Verification{% endblock %}
+{% block topbar_title %}Student Verification{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Student Verification</h1>
+    <p>Compare each student's LRN and school ID before approving account access.</p>
+  </div>
+  <button class="btn btn-secondary" onclick="loadStudentVerifications()" id="btn-refresh-verifications">
+    <i class="fa-solid fa-rotate-right"></i> Refresh
+  </button>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>LRN</th>
+          <th>Phone</th>
+          <th>Grade / Section</th>
+          <th>Submitted</th>
+          <th>School ID</th>
+          <th>Decision</th>
+        </tr>
+      </thead>
+      <tbody id="verification-rows">
+        <tr><td colspan="7" class="loading-box"><div class="spinner" style="margin:0 auto"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addTextCell(row, value) {
+  const cell = document.createElement('td');
+  cell.textContent = value || '—';
+  row.appendChild(cell);
+  return cell;
+}
+
+async function loadStudentVerifications() {
+  const body = document.getElementById('verification-rows');
+  body.replaceChildren();
+  const result = await api('/api/auth/admin/student-verifications');
+  if (!result.success) {
+    const row = document.createElement('tr');
+    const cell = addTextCell(row, result.message || 'Could not load verification requests.');
+    cell.colSpan = 7;
+    body.appendChild(row);
+    return;
+  }
+
+  if (!result.data.length) {
+    const row = document.createElement('tr');
+    const cell = addTextCell(row, 'No student applications are waiting for review.');
+    cell.colSpan = 7;
+    body.appendChild(row);
+    return;
+  }
+
+  result.data.forEach(student => {
+    const row = document.createElement('tr');
+    const studentCell = document.createElement('td');
+    const name = document.createElement('strong');
+    name.textContent = student.full_name;
+    const email = document.createElement('div');
+    email.textContent = student.email;
+    email.style.color = 'var(--text-3)';
+    email.style.fontSize = '.78rem';
+    studentCell.append(name, email);
+    row.appendChild(studentCell);
+
+    addTextCell(row, student.lrn);
+    addTextCell(row, student.phone);
+    addTextCell(row, `Grade ${student.grade} - ${student.section}`);
+    addTextCell(row, student.created_at);
+
+    const documentCell = document.createElement('td');
+    const documentLink = document.createElement('a');
+    documentLink.className = 'btn btn-secondary btn-sm';
+    documentLink.href = student.document_url;
+    documentLink.textContent = 'Download ID';
+    documentCell.appendChild(documentLink);
+    row.appendChild(documentCell);
+
+    const decisionCell = document.createElement('td');
+    const note = document.createElement('input');
+    note.className = 'form-control';
+    note.maxLength = 500;
+    note.placeholder = 'Reason required if rejecting';
+    note.setAttribute('aria-label', `Decision note for ${student.full_name}`);
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.gap = '6px';
+    actions.style.marginTop = '6px';
+    [['approved', 'Approve', 'btn-primary'], ['rejected', 'Reject', 'btn-danger']].forEach(([decision, label, style]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `btn ${style} btn-sm`;
+      button.textContent = label;
+      button.addEventListener('click', () => reviewStudent(student.id, decision, note));
+      actions.appendChild(button);
+    });
+    decisionCell.append(note, actions);
+    row.appendChild(decisionCell);
+    body.appendChild(row);
+  });
+}
+
+async function reviewStudent(userId, decision, noteInput) {
+  const note = noteInput.value.trim();
+  if (decision === 'rejected' && !note) {
+    noteInput.classList.add('is-invalid');
+    noteInput.focus();
+    toast('Add a reason before rejecting this application.', 'warning');
+    return;
+  }
+
+  const result = await api(`/api/auth/admin/student-verifications/${userId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, note }),
+  });
+  if (!result.success) {
+    toast(result.message || 'Could not save the review.', 'error');
+    return;
+  }
+  toast(result.message, 'success');
+  loadStudentVerifications();
+}
+
+loadStudentVerifications();
+</script>
+{% endblock %}

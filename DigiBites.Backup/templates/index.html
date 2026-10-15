@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiBites - Digital POS & Ordering System</title>
+    <!-- Connect to CSS (Flask template path with fallback) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" onerror="this.onerror=null;this.href='../static/style.css';">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Slide-out Sidebar -->
+    <div id="sidebar-overlay" class="overlay hidden" onclick="toggleSidebar()"></div>
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h3><i class="fa-solid fa-utensils"></i> <span id="sidebar-title">DigiBites</span></h3>
+            <button type="button" onclick="toggleSidebar()" class="close-btn" aria-label="Close Sidebar">&times;</button>
+        </div>
+        <nav class="sidebar-nav" id="sidebar-nav-links">
+            <!-- Populated dynamically based on user role (Admin vs Customer) -->
+        </nav>
+    </aside>
+
+    <!-- App Container -->
+    <div class="app-container" id="app-container">
+        
+        <!-- Top Navigation Bar -->
+        <header id="main-header" class="header hidden">
+            <button type="button" onclick="toggleSidebar()" class="icon-btn" aria-label="Toggle navigation menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="brand-title">
+                <h1 id="brand-header-title">DIGIBites</h1>
+                <span id="brand-header-tagline">POS & Ordering System</span>
+            </div>
+            <div class="user-badge" id="user-badge-container">
+                <i class="fa-solid fa-user"></i>
+                <span id="user-greeting">Hi, Student!</span>
+            </div>
+        </header>
+
+        <main id="app-content">
+
+            <!-- ======================================================== -->
+            <!-- 1. AUTHENTICATION VIEW (Sign In & Sign Up for Customers) -->
+            <!-- ======================================================== -->
+            <section id="view-login" class="view">
+                <div class="login-card">
+                    <div class="login-logo">
+                        <h1>DIGIBites</h1>
+                        <p id="auth-subtext">Canteen POS & Pre-Ordering Portal</p>
+                    </div>
+
+                    <!-- Auth Mode Tabs -->
+                    <div class="auth-tabs">
+                        <button type="button" id="tab-btn-signin" class="auth-tab-btn active" onclick="switchAuthMode('signin')">
+                            <i class="fa-solid fa-right-to-bracket"></i> Sign In
+                        </button>
+                        <button type="button" id="tab-btn-signup" class="auth-tab-btn" onclick="switchAuthMode('signup')">
+                            <i class="fa-solid fa-user-plus"></i> Sign Up (Customer)
+                        </button>
+                    </div>
+
+                    <!-- SIGN IN FORM -->
+                    <form id="login-form" onsubmit="handleLogin(event)">
+                        <div class="input-group">
+                            <i class="fa-solid fa-user"></i>
+                            <input type="text" id="login-username" placeholder="Username / Student ID" autocomplete="username" required>
+                        </div>
+                        <div class="input-group">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" id="btn-login-submit">
+                            <i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In
+                        </button>
+                    </form>
+
+                    <!-- SIGN UP FORM (Customer Registration) -->
+                    <form id="register-form" class="hidden" onsubmit="handleRegister(event)">
+                        <div class="input-group">
+                            <i class="fa-solid fa-id-badge"></i>
+                            <input type="text" id="reg-fullname" placeholder="Full Name (e.g. Maria Santos)" required>
+                        </div>
+                        <div class="input-group">
+                            <i class="fa-solid fa-user"></i>
+                            <input type="text" id="reg-username" placeholder="Choose Username / Student ID" required>
+                        </div>
+                        <div class="input-group">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" id="reg-password" placeholder="Create Password (min 4 chars)" required>
+                        </div>
+                        <div class="input-group">
+                            <i class="fa-solid fa-check-double"></i>
+                            <input type="password" id="reg-confirm-password" placeholder="Confirm Password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fa-solid fa-user-check"></i> Create Customer Account
+                        </button>
+                    </form>
+
+                    <!-- Quick Demo Credentials for Fast Testing -->
+                    <div style="margin-top: 24px; text-align: center;">
+                        <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">QUICK TEST LOGINS:</span>
+                        <div class="demo-logins">
+                            <button type="button" class="btn-demo" onclick="fillDemo('student1', 'student123')">
+                                <i class="fa-solid fa-graduation-cap"></i> Demo Student
+                            </button>
+                            <button type="button" class="btn-demo" onclick="fillDemo('admin', 'admin123')">
+                                <i class="fa-solid fa-shield-halved"></i> Demo Admin
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 2. STUDENT DASHBOARD (Personalized for Customer)         -->
+            <!-- ======================================================== -->
+            <section id="view-dashboard" class="view hidden">
+                <!-- Welcome Hero Banner -->
+                <div class="dashboard-hero">
+                    <div class="hero-text">
+                        <h2>Welcome, <span id="student-dash-name">Student</span>! 👋</h2>
+                        <p id="student-dash-sub">Here is your canteen pre-order summary today.</p>
+                    </div>
+                    <div class="hero-icon">🍱</div>
+                </div>
+
+                <!-- Student Personal KPI Grid -->
+                <div class="student-kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Active Order</div>
+                        <div class="kpi-value" id="student-kpi-active" style="font-size: 1.05rem;">None</div>
+                        <div class="kpi-sub">Current status</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Orders</div>
+                        <div class="kpi-value" id="student-kpi-orders">0</div>
+                        <div class="kpi-sub">Lifetime orders</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Spent</div>
+                        <div class="kpi-value" id="student-kpi-spent">₱0.00</div>
+                        <div class="kpi-sub">Canteen orders</div>
+                    </div>
+                </div>
+
+                <!-- Quick Action Tiles -->
+                <div class="quick-action-tiles">
+                    <div class="action-tile" onclick="switchTab('specials')">
+                        <i class="fa-solid fa-cart-plus"></i>
+                        <span>Order Food</span>
+                    </div>
+                    <div class="action-tile" onclick="switchTab('orders')">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>Track Status</span>
+                    </div>
+                    <div class="action-tile" onclick="switchTab('cart')">
+                        <i class="fa-solid fa-basket-shopping"></i>
+                        <span>View Basket</span>
+                    </div>
+                </div>
+
+                <!-- Active Order Live Tracker Card -->
+                <div class="card">
+                    <h3><i class="fa-solid fa-receipt"></i> Active Order Progress</h3>
+                    <div class="order-progress">
+                        <div class="step" id="dash-step-1"><span>1</span><p>Waiting</p></div>
+                        <div class="step" id="dash-step-2"><span>2</span><p>Processing</p></div>
+                        <div class="step" id="dash-step-3"><span>3</span><p>To Pickup</p></div>
+                    </div>
+                    <table class="order-table">
+                        <thead>
+                            <tr><th>Item</th><th>Qty</th><th>Total</th></tr>
+                        </thead>
+                        <tbody id="active-order-summary">
+                            <tr><td colspan="3" class="empty-state">No active orders right now.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Dynamic Live Menu Availability -->
+                <div class="card">
+                    <h3><i class="fa-solid fa-chart-pie"></i> Today's Food Availability</h3>
+                    <div class="status-chips" id="dynamic-availability-chips">
+                        <span class="chip available"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</span>
+                    </div>
+                </div>
+
+                <!-- Dynamic Canteen Counters -->
+                <div class="grid-2" id="dynamic-canteen-grid">
+                    <!-- Populated dynamically from MySQL menu_items grouped by canteen -->
+                </div>
+
+                <button type="button" class="btn btn-action floating-btn" onclick="switchTab('specials')">
+                    <i class="fa-solid fa-utensils"></i> Browse Full Canteen Menu
+                </button>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 3. STAFF / ADMIN DASHBOARD (Operations & KPI Center)     -->
+            <!-- ======================================================== -->
+            <section id="view-staff-dashboard" class="view hidden">
+                <!-- Staff Hero Banner -->
+                <div class="dashboard-hero staff-hero">
+                    <div class="hero-text">
+                        <h2>Staff Operations Center 🛡️</h2>
+                        <p>Logged in as <strong id="staff-dash-name">Staff Admin</strong> &bull; Live Canteen Status</p>
+                    </div>
+                    <div class="hero-icon">🏪</div>
+                </div>
+
+                <!-- Staff Key Performance Indicators Grid -->
+                <div class="staff-kpi-grid">
+                    <div class="kpi-card staff-kpi">
+                        <div class="kpi-label">Today's Sales</div>
+                        <div class="kpi-value" id="kpi-today-sales" style="color: var(--primary-dark);">₱0.00</div>
+                        <div class="kpi-sub">Total revenue</div>
+                    </div>
+                    <div class="kpi-card staff-kpi">
+                        <div class="kpi-label">Active Queue</div>
+                        <div class="kpi-value" id="kpi-active-queue">0</div>
+                        <div class="kpi-sub">Waiting + Preparing</div>
+                    </div>
+                    <div class="kpi-card staff-kpi">
+                        <div class="kpi-label">Completed</div>
+                        <div class="kpi-value" id="kpi-completed-orders" style="color: #166534;">0</div>
+                        <div class="kpi-sub">Orders finished</div>
+                    </div>
+                    <div class="kpi-card staff-kpi">
+                        <div class="kpi-label">Stock Alerts</div>
+                        <div class="kpi-value" id="kpi-stock-alerts" style="color: #dc2626;">0</div>
+                        <div class="kpi-sub">Low / Sold Out</div>
+                    </div>
+                </div>
+
+                <!-- Staff Operations Quick Action Bar -->
+                <div class="quick-action-tiles" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="action-tile" onclick="switchTab('admin-orders')">
+                        <i class="fa-solid fa-cash-register"></i>
+                        <span>POS Queue</span>
+                    </div>
+                    <div class="action-tile" onclick="openAddProductModal()">
+                        <i class="fa-solid fa-plus-circle"></i>
+                        <span>Add Product</span>
+                    </div>
+                    <div class="action-tile" onclick="switchTab('admin-inventory')">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Inventory</span>
+                    </div>
+                    <div class="action-tile" onclick="refreshStaffDashboard()">
+                        <i class="fa-solid fa-rotate"></i>
+                        <span>Refresh</span>
+                    </div>
+                </div>
+
+                <!-- Live Kitchen & Counter Feed (Urgent Queue) -->
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0;"><i class="fa-solid fa-fire"></i> Urgent Order Queue (Waiting / Preparing)</h3>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="switchTab('admin-orders')">
+                            View All <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div id="staff-dash-queue-container">
+                        <p class="empty-state">No urgent orders in queue.</p>
+                    </div>
+                </div>
+
+                <!-- Low Stock Alert Watchlist -->
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0; color: #b91c1c;"><i class="fa-solid fa-triangle-exclamation"></i> Low Stock & Sold Out Watchlist</h3>
+                        <button type="button" class="btn btn-sm" style="background: #e2e8f0; color: #334155;" onclick="switchTab('admin-inventory')">
+                            Manage All
+                        </button>
+                    </div>
+                    <div id="staff-dash-stock-container">
+                        <p class="empty-state">All items well stocked!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 4. CUSTOMER: SPECIALS & MENU CATALOG (Zero Hardcoding)   -->
+            <!-- ======================================================== -->
+            <section id="view-specials" class="view hidden">
+                <div class="section-title">
+                    <h2>Canteen Menu & Specials</h2>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass" style="color: var(--primary);"></i>
+                    <input type="text" id="menu-search-input" placeholder="Search food, snack, or drink..." oninput="filterMenuItems()">
+                </div>
+
+                <!-- Dynamic Category Filter Pills (loaded from /api/config) -->
+                <div class="category-filter" id="category-filter-container">
+                    <button type="button" class="cat-pill active" onclick="setCategoryFilter('all')">All Items</button>
+                </div>
+
+                <!-- Dynamic Menu Grid Container -->
+                <div id="dynamic-menu-catalog">
+                    <p class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading menu from database...</p>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 5. CUSTOMER: CART & PRE-ORDER CHECKOUT                   -->
+            <!-- ======================================================== -->
+            <section id="view-cart" class="view hidden">
+                <div class="section-title">
+                    <h2>Your Order Basket</h2>
+                </div>
+                
+                <div id="cart-items-container" class="cart-list"></div>
+
+                <div class="cart-summary">
+                    <!-- Dynamic Payment Method Selection -->
+                    <div style="text-align: left; margin-bottom: 14px;">
+                        <label for="cart-payment-method" style="font-size: 0.85rem; font-weight: bold; color: #475569; display: block; margin-bottom: 6px;">
+                            <i class="fa-solid fa-credit-card"></i> Payment Method:
+                        </label>
+                        <select id="cart-payment-method" class="select-input">
+                            <!-- Populated from system_config -->
+                            <option value="Cash on Pickup">Cash on Pickup</option>
+                            <option value="GCash">GCash</option>
+                            <option value="Campus Card">Campus Card</option>
+                        </select>
+                    </div>
+
+                    <h3>Total Amount: <span id="cart-total-price">₱0.00</span></h3>
+                    <button type="button" onclick="submitOrder()" class="btn btn-primary btn-block">
+                        <i class="fa-solid fa-check"></i> Confirm Pre-Order
+                    </button>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 6. CUSTOMER: ORDER STATUS & HISTORY                      -->
+            <!-- ======================================================== -->
+            <section id="view-orders" class="view hidden">
+                <div class="section-title">
+                    <h2>Order Status & Tracking</h2>
+                </div>
+
+                <div class="card">
+                    <h3><i class="fa-solid fa-receipt"></i> Active Order Tracker</h3>
+                    <div class="order-progress">
+                        <div class="step" id="orders-step-1"><span>1</span><p>Waiting</p></div>
+                        <div class="step" id="orders-step-2"><span>2</span><p>Processing</p></div>
+                        <div class="step" id="orders-step-3"><span>3</span><p>To Pickup</p></div>
+                    </div>
+                    <table class="order-table">
+                        <thead>
+                            <tr><th>Item</th><th>Qty</th><th>Total</th></tr>
+                        </thead>
+                        <tbody id="orders-active-summary">
+                            <tr><td colspan="3" class="empty-state">No active orders yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3><i class="fa-solid fa-clock-rotate-left"></i> My Order History</h3>
+                    <div id="order-history-list">
+                        <p class="empty-state">No order history available.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 7. ADMIN / POS: LIVE ORDERS & KITCHEN QUEUE              -->
+            <!-- ======================================================== -->
+            <section id="view-admin-orders" class="view hidden">
+                <div class="section-title">
+                    <h2><i class="fa-solid fa-cash-register"></i> POS & Kitchen Queue</h2>
+                </div>
+
+                <div class="stats-grid" id="admin-mini-stats">
+                    <div class="stat-box">
+                        <h4>Active Queue</h4>
+                        <div class="stat-val" id="stat-active-orders">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <h4>Today's Sales</h4>
+                        <div class="stat-val" id="stat-total-sales">₱0.00</div>
+                    </div>
+                </div>
+
+                <!-- Status Filter Pills -->
+                <div class="category-filter" style="margin-bottom: 8px;">
+                    <button type="button" class="cat-pill active" onclick="filterAdminOrders('All')">All Orders</button>
+                    <button type="button" class="cat-pill" onclick="filterAdminOrders('Waiting')">Waiting</button>
+                    <button type="button" class="cat-pill" onclick="filterAdminOrders('Processing')">Processing</button>
+                    <button type="button" class="cat-pill" onclick="filterAdminOrders('To Pickup')">To Pickup</button>
+                    <button type="button" class="cat-pill" onclick="filterAdminOrders('Completed')">Completed</button>
+                </div>
+
+                <div style="padding: 0 16px;" id="admin-orders-container">
+                    <p class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> Loading live orders...</p>
+                </div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 8. ADMIN: PRODUCTS & INVENTORY MANAGEMENT                -->
+            <!-- ======================================================== -->
+            <section id="view-admin-inventory" class="view hidden">
+                <div class="section-title">
+                    <h2><i class="fa-solid fa-boxes-stacked"></i> Products & Inventory</h2>
+                </div>
+
+                <!-- Add New Product Toggle Card -->
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="margin: 0;"><i class="fa-solid fa-plus-circle"></i> Add New Product</h3>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="toggleAddProductForm()">
+                            <i class="fa-solid fa-chevron-down" id="add-prod-icon"></i>
+                        </button>
+                    </div>
+
+                    <form id="add-product-form" class="hidden" style="margin-top: 14px;" onsubmit="handleCreateProduct(event)">
+                        <div class="input-group">
+                            <i class="fa-solid fa-bowl-food"></i>
+                            <input type="text" id="new-prod-name" placeholder="Item Name (e.g. Arroz Caldo)" required>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Price (₱):</label>
+                                <input type="number" step="0.5" id="new-prod-price" placeholder="25.00" class="select-input" required>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Initial Stock:</label>
+                                <input type="number" id="new-prod-stock" placeholder="30" value="30" class="select-input" required>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Canteen:</label>
+                                <select id="new-prod-canteen" class="select-input">
+                                    <option value="JHS">JHS Canteen</option>
+                                    <option value="SHS">SHS Canteen</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Category:</label>
+                                <select id="new-prod-category" class="select-input">
+                                    <option value="Morning">Morning</option>
+                                    <option value="Afternoon">Afternoon</option>
+                                    <option value="Snacks">Snacks</option>
+                                    <option value="Beverages">Beverages</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Status:</label>
+                                <select id="new-prod-status" class="select-input">
+                                    <option value="Available">Available</option>
+                                    <option value="Sold Out">Sold Out</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.75rem; font-weight: bold; color: #64748b;">Icon / Emoji:</label>
+                                <input type="text" id="new-prod-emoji" placeholder="🍲" value="🍲" class="select-input">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Product to Database
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Products Table -->
+                <div class="card" style="overflow-x: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 style="margin: 0;"><i class="fa-solid fa-list"></i> Catalog & Inventory</h3>
+                        <span id="product-count-badge" class="badge">0 Items</span>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Price</th>
+                                <th>Stock</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-products-table-body">
+                            <tr><td colspan="5" class="empty-state">Loading products...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Connect to JS (Flask template path with fallback) -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        if (typeof switchTab === 'undefined') {
+            var fallback = document.createElement('script');
+            fallback.src = '../static/script.js';
+            document.body.appendChild(fallback);
+        }
+    </script>
+</body>
+</html>

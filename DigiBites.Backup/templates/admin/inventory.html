@@ -1,0 +1,542 @@
+{% extends "base.html" %}
+{% block page_title %}Inventory{% endblock %}
+{% block topbar_title %}Inventory Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1>Inventory</h1><p>Manage products, prices, and stock levels</p></div>
+  <button class="btn btn-primary" onclick="openAddModal()">
+    <i class="fa-solid fa-plus"></i> Add Product
+  </button>
+</div>
+
+<!-- Search & filter bar -->
+<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+  <div class="search-box" style="flex:1;min-width:200px;margin-bottom:0">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input type="text" id="inv-search" placeholder="Search products or ingredients…" oninput="filterProducts()">
+  </div>
+  <select class="form-control" id="inv-canteen-filter" style="width:auto" onchange="filterProducts()">
+    <option value="">All Canteens</option>
+    <option value="SHS">🏢 SHS Canteen</option>
+    <option value="JHS">🏫 JHS Canteen</option>
+  </select>
+  <select class="form-control" id="inv-cat-filter" style="width:auto" onchange="filterProducts()">
+    <option value="">All Categories</option>
+  </select>
+  <select class="form-control" id="inv-status-filter" style="width:auto" onchange="filterProducts()">
+    <option value="">All Status</option>
+    <option>Available</option>
+    <option>Sold Out</option>
+    <option>Unavailable</option>
+  </select>
+</div>
+
+<!-- Products table -->
+<div class="card">
+  <div class="table-wrap">
+    <table id="inv-table">
+      <thead>
+        <tr>
+          <th style="width:60px">Photo</th>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Ingredients & Allergens</th>
+          <th>Canteen</th>
+          <th>Price</th>
+          <th>Stock</th>
+          <th>Status</th>
+          <th style="text-align:center">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="inv-tbody">
+        <tr><td colspan="9" class="loading-box"><div class="spinner" style="margin:0 auto"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Add / Edit Product Modal ─────────────────────────────── -->
+<div id="product-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)">
+  <div class="card" style="width:100%;max-width:580px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 25px -5px rgba(0,0,0,0.25)">
+    <div class="card-header">
+      <h3 id="modal-title"><i class="fa-solid fa-box-open"></i> Add Product</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeProductModal()">✕</button>
+    </div>
+    <form id="product-form" onsubmit="saveProduct(event)" novalidate>
+      <div class="form-grid-2">
+
+        <!-- Food Image Upload & URL Section -->
+        <div class="form-group" style="grid-column:1/-1; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:14px; margin-bottom:4px;">
+          <label class="form-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span><i class="fa-solid fa-image" style="color:#f59e0b"></i> Food Image</span>
+            <span style="font-size:0.75rem; color:var(--text-3); font-weight:normal;">Upload image or paste link</span>
+          </label>
+          
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+            <!-- Live Preview -->
+            <div id="p-img-preview-wrap" style="position:relative; width:80px; height:80px; border-radius:12px; overflow:hidden; background:#ffffff; border:2px solid #e2e8f0; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,0.06);">
+              <img id="p-img-preview" src="" alt="Preview" style="display:none; width:100%; height:100%; object-fit:cover;" onerror="handlePreviewError()">
+              <div id="p-img-placeholder" style="text-align:center; color:#94a3b8; font-size:1.5rem;"><i class="fa-solid fa-utensils"></i></div>
+              <div id="p-upload-spinner" style="display:none; position:absolute; inset:0; background:rgba(255,255,255,0.9); align-items:center; justify-content:center; flex-direction:column; gap:4px;">
+                <div class="spinner" style="width:20px; height:20px; border-width:2px;"></div>
+                <span style="font-size:9px; font-weight:700; color:#3b82f6;">Uploading…</span>
+              </div>
+            </div>
+
+            <!-- Upload & URL Controls -->
+            <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input type="file" id="p-image-file" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif" style="display:none;" onchange="uploadImageFile(this)">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('p-image-file').click()" id="btn-upload-trigger">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> Upload Image
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="clearProductImage()" id="btn-clear-img" title="Clear image">
+                  <i class="fa-solid fa-trash-can"></i> Clear
+                </button>
+              </div>
+
+              <div>
+                <input class="form-control" id="p-image-url" type="text" placeholder="Or paste image URL (https://... or /static/uploads/...)" 
+                       style="font-size:0.8rem; padding:6px 10px;" oninput="onImageUrlInput(this.value)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Product Name *</label>
+          <input class="form-control" id="p-name"  type="text" placeholder="e.g. Chicken Adobo" required>
+          <div class="error-msg" id="err-p-name"></div>
+        </div>
+
+        <!-- Ingredients Input -->
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fa-solid fa-receipt" style="color:#f59e0b"></i> Ingredients List (Connected to Inventory)</span>
+            <span style="font-size:0.75rem; color:var(--text-3); font-weight:normal;">Shown to students</span>
+          </label>
+          <textarea class="form-control" id="p-ingredients" rows="2" 
+                    placeholder="e.g. Chicken, soy sauce, garlic, cane vinegar, black pepper, bay leaves"
+                    oninput="autoDetectAllergensFromIngredients(this.value)"></textarea>
+        </div>
+
+        <!-- Allergen Checklist -->
+        <div class="form-group" style="grid-column:1/-1; background:#fffdf5; border:1px solid #fde68a; border-radius:12px; padding:12px 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="form-label" style="margin-bottom:0; color:#92400e; font-weight:700;">
+              <i class="fa-solid fa-shield-halved" style="color:#d97706;"></i> Allergen Information
+            </label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="autoDetectAllergensFromIngredients(document.getElementById('p-ingredients').value)" 
+                    style="font-size:0.72rem; padding:2px 8px; color:#b45309;" title="Auto-detect based on ingredients">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Detect
+            </button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px;" id="p-allergens-list">
+            <!-- Injected by initAllergenCheckboxes() -->
+          </div>
+          <div style="font-size:0.72rem; color:#78350f; margin-top:6px;">
+            Selected allergens will trigger automatic warning messages for students with matching allergies.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Price (₱) *</label>
+          <input class="form-control" id="p-price" type="number" step="0.50" min="1" placeholder="0.00" required>
+          <div class="error-msg" id="err-p-price"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stock Quantity</label>
+          <input class="form-control" id="p-stock" type="number" min="0" placeholder="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Canteen Location</label>
+          <select class="form-control" id="p-canteen">
+            <option value="SHS">Senior High School (SHS) Canteen</option>
+            <option value="JHS">Junior High School (JHS) Canteen</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-control" id="p-category">
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+            <option value="Snacks">Snacks</option>
+            <option value="Beverages">Beverages</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="p-status">
+            <option>Available</option><option>Sold Out</option><option>Unavailable</option>
+          </select>
+        </div>
+      </div>
+      <input type="hidden" id="p-id" value="">
+      <input type="hidden" id="p-emoji" value="🍲">
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="modal-save" style="margin-top:14px">
+        <i class="fa-solid fa-floppy-disk"></i> Save Product
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Restock modal -->
+<div id="restock-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="width:100%;max-width:360px">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-plus-circle"></i> Quick Restock</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeRestockModal()">✕</button>
+    </div>
+    <p id="restock-item-name" style="font-size:.9rem;color:var(--text-2);margin-bottom:14px"></p>
+    <div class="form-group">
+      <label class="form-label">Units to Add</label>
+      <input class="form-control" id="restock-amount" type="number" min="1" value="20">
+    </div>
+    <button class="btn btn-primary btn-block" id="restock-save-btn" onclick="saveRestock()">
+      <i class="fa-solid fa-plus"></i> Add Stock
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allProducts = [], editingProd = null, restockId = null;
+
+const STATUS_BADGE = {
+  'Available':   'badge-green',
+  'Sold Out':    'badge-red',
+  'Unavailable': 'badge-gray',
+};
+
+async function loadProducts() {
+  try {
+    const [cfg, data] = await Promise.all([
+      api('/api/config'),
+      api('/api/menu')
+    ]);
+
+    if (cfg && cfg.success && cfg.data) {
+      const catSelect = document.getElementById('inv-cat-filter');
+      const modalCatSelect = document.getElementById('p-category');
+      const categories = (cfg.data.categories || []).map(c => c.name || c.code);
+      if (catSelect && categories.length) {
+        catSelect.innerHTML = '<option value="">All Categories</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+      if (modalCatSelect && categories.length) {
+        const cur = modalCatSelect.value;
+        modalCatSelect.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        if (cur) modalCatSelect.value = cur;
+      }
+    }
+
+    if (!data.success) return;
+    allProducts = data.data || [];
+    filterProducts();
+  } catch (err) {
+    console.error('Failed to load inventory products:', err);
+  }
+}
+
+function filterProducts() {
+  const q  = (document.getElementById('inv-search').value || '').toLowerCase().trim();
+  const sf = document.getElementById('inv-status-filter').value;
+  const cf = document.getElementById('inv-canteen-filter').value;
+  const kf = document.getElementById('inv-cat-filter').value;
+
+  const filtered = allProducts.filter(p => {
+    const matchQ = !q || p.name.toLowerCase().includes(q) || (p.ingredients && p.ingredients.toLowerCase().includes(q));
+    const matchS = !sf || p.status === sf;
+    const matchC = !cf || p.canteen === cf || p.canteen_location === cf;
+    const matchK = !kf || p.category === kf;
+    return matchQ && matchS && matchC && matchK;
+  });
+  renderTable(filtered);
+}
+
+function renderTable(products) {
+  const tbody = document.getElementById('inv-tbody');
+  if (!products.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📦</div><h4>No products found</h4><p style="color:var(--text-muted);font-size:0.85rem">Try adjusting your canteen or category filters.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = products.map(p => {
+    const itemAllergens = Array.isArray(p.allergens) ? p.allergens : [];
+    const canteenVal = p.canteen || p.canteen_location || '';
+    const canteenBadge = canteenVal === 'SHS'
+      ? `<span class="badge" style="background:#e0e7ff;color:#3730a3;font-weight:700"><i class="fa-solid fa-building"></i> SHS</span>`
+      : (canteenVal === 'JHS' ? `<span class="badge" style="background:#ecfdf5;color:#065f46;font-weight:700"><i class="fa-solid fa-school"></i> JHS</span>` : `<span class="badge badge-gray">${canteenVal || '—'}</span>`);
+
+    return `
+    <tr>
+      <td style="width:60px">
+        <div style="width:48px;height:48px;border-radius:10px;overflow:hidden;background:#f8fafc;display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0;flex-shrink:0;">
+          ${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.parentElement.innerHTML='<i class=\\'fa-solid fa-utensils\\' style=\\'color:#94a3b8;font-size:1.15rem\\'></i>'">` : `<i class="fa-solid fa-utensils" style="color:#94a3b8;font-size:1.15rem"></i>`}
+        </div>
+      </td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.category}</td>
+      <td style="max-width:230px;">
+        ${p.ingredients ? `<div style="font-size:0.75rem; color:#475569; line-height:1.3; margin-bottom:4px; max-height:44px; overflow:hidden; text-overflow:ellipsis;" title="${p.ingredients}"><strong>Ingr:</strong> ${p.ingredients}</div>` : `<div style="font-size:0.72rem; color:#94a3b8; font-style:italic; margin-bottom:2px;">No ingredients specified</div>`}
+        ${itemAllergens.length ? `
+          <div style="display:flex; flex-wrap:wrap; gap:3px;">
+            ${itemAllergens.map(al => `<span class="badge badge-amber" style="font-size:0.66rem; padding:1px 5px;"><i class="fa-solid fa-triangle-exclamation"></i> ${al}</span>`).join('')}
+          </div>
+        ` : `<span class="badge badge-gray" style="font-size:0.66rem;">No allergens</span>`}
+      </td>
+      <td>${canteenBadge}</td>
+      <td><strong>${peso(p.price)}</strong></td>
+      <td>
+        <span style="font-weight:600;color:${p.stock_qty <= 0 ? 'var(--danger)' : p.stock_qty <= 10 ? 'var(--warning)' : 'var(--text)'}">
+          ${p.stock_qty}
+        </span>
+      </td>
+      <td><span class="badge ${STATUS_BADGE[p.status] || 'badge-gray'}">${p.status}</span></td>
+      <td>
+        <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal(${JSON.stringify(p).replace(/"/g,'&quot;')})"><i class="fa-solid fa-pen"></i> Edit</button>
+          <button class="btn btn-ghost btn-sm"     onclick="openRestockModal(${p.id},'${p.name}')"><i class="fa-solid fa-boxes-stacked"></i></button>
+          <button class="btn btn-danger btn-sm"    onclick="deleteProduct(${p.id},'${p.name}')"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Image Upload & Preview Helpers ── */
+function updateImagePreview(url) {
+  const img = document.getElementById('p-img-preview');
+  const ph  = document.getElementById('p-img-placeholder');
+  if (url && url.trim()) {
+    img.src = url.trim();
+    img.style.display = 'block';
+    ph.style.display = 'none';
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    ph.style.display = 'block';
+  }
+}
+
+function onImageUrlInput(url) {
+  updateImagePreview(url);
+}
+
+function handlePreviewError() {
+  const img = document.getElementById('p-img-preview');
+  const ph  = document.getElementById('p-img-placeholder');
+  img.style.display = 'none';
+  ph.style.display = 'block';
+}
+
+function clearProductImage() {
+  document.getElementById('p-image-url').value = '';
+  document.getElementById('p-image-file').value = '';
+  updateImagePreview('');
+}
+
+async function uploadImageFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  const spinner = document.getElementById('p-upload-spinner');
+  const uploadBtn = document.getElementById('btn-upload-trigger');
+  spinner.style.display = 'flex';
+  uploadBtn.disabled = true;
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/menu/upload-image', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success && data.image_url) {
+      document.getElementById('p-image-url').value = data.image_url;
+      updateImagePreview(data.image_url);
+      toast('Image uploaded successfully!', 'success');
+    } else {
+      toast(data.message || 'Image upload failed.', 'error');
+    }
+  } catch (err) {
+    toast('Image upload failed: ' + err.message, 'error');
+  } finally {
+    spinner.style.display = 'none';
+    uploadBtn.disabled = false;
+    input.value = '';
+  }
+}
+
+/* ── Allergen Checkboxes & Auto-detection ── */
+const ALLERGEN_OPTIONS = [
+  { name: 'Peanuts', emoji: '🥜' },
+  { name: 'Tree Nuts', emoji: '🌰' },
+  { name: 'Dairy / Milk', emoji: '🥛' },
+  { name: 'Eggs', emoji: '🥚' },
+  { name: 'Fish', emoji: '🐟' },
+  { name: 'Shellfish', emoji: '🦐' },
+  { name: 'Wheat / Gluten', emoji: '🌾' },
+  { name: 'Soy', emoji: '🫘' },
+  { name: 'Sesame', emoji: '🌱' }
+];
+
+function initAllergenCheckboxes() {
+  const container = document.getElementById('p-allergens-list');
+  if (!container) return;
+  container.innerHTML = ALLERGEN_OPTIONS.map(a => `
+    <label style="display:flex; align-items:center; gap:6px; font-size:0.78rem; color:#1e293b; background:#ffffff; border:1px solid #e2e8f0; padding:5px 8px; border-radius:6px; cursor:pointer;">
+      <input type="checkbox" value="${a.name}" class="p-allergen-chk" style="accent-color:#d97706; cursor:pointer;">
+      <span>${a.emoji}</span>
+      <span style="font-weight:600;">${a.name}</span>
+    </label>
+  `).join('');
+}
+
+function autoDetectAllergensFromIngredients(text) {
+  if (!text) return;
+  const t = text.toLowerCase();
+  
+  const rules = {
+    'Dairy / Milk': ['milk', 'dairy', 'cheese', 'butter', 'cream', 'lactose', 'evaporated', 'condensed', 'tablea'],
+    'Eggs': ['egg', 'mayonnaise', 'pastry', 'custard'],
+    'Wheat / Gluten': ['wheat', 'flour', 'bread', 'pasta', 'noodle', 'macaroni', 'gluten', 'panko', 'crumbs', 'lumpia wrapper', 'wrapper', 'graham'],
+    'Soy': ['soy', 'tofu', 'soya', 'edamame'],
+    'Peanuts': ['peanut', 'groundnut'],
+    'Tree Nuts': ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut'],
+    'Fish': ['fish', 'tuna', 'tilapia', 'salmon', 'patis'],
+    'Shellfish': ['shrimp', 'crab', 'squid', 'oyster', 'prawn', 'clam', 'lobster', 'oyster sauce'],
+    'Sesame': ['sesame', 'tahini']
+  };
+
+  Object.entries(rules).forEach(([allergen, keywords]) => {
+    const matched = keywords.some(k => t.includes(k));
+    const chk = document.querySelector(`.p-allergen-chk[value="${allergen}"]`);
+    if (chk && matched) {
+      chk.checked = true;
+    }
+  });
+}
+
+/* ── Add / Edit modal ── */
+function openAddModal() {
+  editingProd = null;
+  document.getElementById('modal-title').innerHTML = '<i class="fa-solid fa-plus"></i> Add Product';
+  document.getElementById('product-form').reset();
+  const canteenFilter = document.getElementById('inv-canteen-filter').value;
+  document.getElementById('p-canteen').value = ['SHS', 'JHS'].includes(canteenFilter) ? canteenFilter : 'SHS';
+  document.getElementById('p-id').value    = '';
+  document.getElementById('p-emoji').value = '🍲';
+  document.getElementById('p-ingredients').value = '';
+  document.querySelectorAll('.p-allergen-chk').forEach(c => c.checked = false);
+  clearProductImage();
+  document.getElementById('product-modal').style.display = 'flex';
+}
+
+function openEditModal(p) {
+  editingProd = p;
+  document.getElementById('modal-title').innerHTML = '<i class="fa-solid fa-pen"></i> Edit Product';
+  document.getElementById('p-id').value       = p.id;
+  document.getElementById('p-name').value     = p.name;
+  document.getElementById('p-price').value    = p.price;
+  document.getElementById('p-stock').value    = p.stock_qty;
+  document.getElementById('p-canteen').value  = p.canteen || p.canteen_location || 'SHS';
+  document.getElementById('p-category').value = p.category;
+  document.getElementById('p-status').value   = p.status;
+  document.getElementById('p-emoji').value    = p.emoji || '🍲';
+  
+  document.getElementById('p-ingredients').value = p.ingredients || '';
+  const itemAllergens = Array.isArray(p.allergens) ? p.allergens : [];
+  document.querySelectorAll('.p-allergen-chk').forEach(c => {
+    c.checked = itemAllergens.includes(c.value);
+  });
+
+  const imgUrl = p.image_url || '';
+  document.getElementById('p-image-url').value = imgUrl;
+  updateImagePreview(imgUrl);
+
+  document.getElementById('product-modal').style.display = 'flex';
+}
+
+function closeProductModal() {
+  document.getElementById('product-modal').style.display = 'none';
+  editingProd = null;
+}
+
+async function saveProduct(e) {
+  e.preventDefault();
+  const name  = document.getElementById('p-name').value.trim();
+  const price = parseFloat(document.getElementById('p-price').value);
+  document.getElementById('err-p-name').textContent  = '';
+  document.getElementById('err-p-price').textContent = '';
+  let valid = true;
+  if (!name)         { document.getElementById('err-p-name').textContent  = 'Name is required.'; valid = false; }
+  if (!price || price <= 0) { document.getElementById('err-p-price').textContent = 'Valid price required.'; valid = false; }
+  if (!valid) return;
+
+  const selectedAllergens = Array.from(document.querySelectorAll('.p-allergen-chk:checked')).map(c => c.value);
+
+  const payload = {
+    name, price,
+    stock_qty:   parseInt(document.getElementById('p-stock').value)  || 50,
+    canteen:     document.getElementById('p-canteen').value,
+    category:    document.getElementById('p-category').value,
+    status:      document.getElementById('p-status').value,
+    emoji:       document.getElementById('p-emoji').value || '🍲',
+    image_url:   document.getElementById('p-image-url').value.trim(),
+    ingredients: document.getElementById('p-ingredients').value.trim(),
+    allergens:   selectedAllergens
+  };
+
+  const id  = document.getElementById('p-id').value;
+  const btn = document.getElementById('modal-save');
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  const data = id
+    ? await api(`/api/menu/${id}`, { method:'PUT',  body:JSON.stringify(payload) })
+    : await api('/api/menu',       { method:'POST', body:JSON.stringify(payload) });
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Product';
+  if (data.success) { toast(data.message, 'success'); closeProductModal(); loadProducts(); }
+  else toast(data.message || 'Save failed.', 'error');
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const data = await api(`/api/menu/${id}`, { method:'DELETE' });
+  if (data.success) { toast(data.message, 'success'); loadProducts(); }
+  else toast(data.message || 'Delete failed.', 'error');
+}
+
+/* ── Restock modal ── */
+function openRestockModal(id, name) {
+  restockId = id;
+  document.getElementById('restock-item-name').textContent = name;
+  document.getElementById('restock-amount').value = 20;
+  document.getElementById('restock-modal').style.display = 'flex';
+}
+function closeRestockModal() { document.getElementById('restock-modal').style.display = 'none'; restockId = null; }
+
+async function saveRestock() {
+  if (!restockId) return;
+  const amount = parseInt(document.getElementById('restock-amount').value);
+  if (!amount || amount < 1) { toast('Enter a valid amount.', 'warning'); return; }
+  const btn = document.getElementById('restock-save-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  const data = await api(`/api/menu/${restockId}/restock`, { method:'POST', body:JSON.stringify({ amount }) });
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Stock';
+  if (data.success) { toast(data.message, 'success'); closeRestockModal(); loadProducts(); }
+  else toast(data.message || 'Restock failed.', 'error');
+}
+
+// Close modals on backdrop click
+['product-modal','restock-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) { id === 'product-modal' ? closeProductModal() : closeRestockModal(); }
+  });
+});
+
+initAllergenCheckboxes();
+loadProducts();
+</script>
+{% endblock %}

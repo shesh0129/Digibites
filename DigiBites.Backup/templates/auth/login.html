@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — DigiBites</title>
+  <meta name="description" content="Sign in or create your DigiBites canteen account">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=1.3">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="DiGi Bites Logo" class="auth-logo-img">
+      <h1>DigiBites</h1>
+      <p>School Canteen POS & Ordering System</p>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab active" id="tab-login"    onclick="switchTab('login')"    role="tab" aria-selected="true">Sign In</button>
+      <button class="auth-tab"        id="tab-register" onclick="switchTab('register')"  role="tab" aria-selected="false">Create Account</button>
+    </div>
+
+    <!-- Global error banner -->
+    <div id="auth-error" class="alert alert-danger" style="display:none">
+      <i class="fa-solid fa-circle-xmark"></i>
+      <span id="auth-error-msg"></span>
+    </div>
+    <div id="registration-success" class="alert alert-success" style="display:none">
+      <i class="fa-solid fa-circle-check"></i>
+      <span id="registration-success-msg"></span>
+    </div>
+
+    <!-- ── LOGIN FORM ──────────────────────────────────── -->
+    <form id="login-form" onsubmit="handleLogin(event)" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="login-email">Email Address</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-envelope"></i>
+          <input id="login-email" name="email" type="text" class="form-control"
+                 placeholder="name@gmail.com (or admin)" autocomplete="email" required>
+        </div>
+        <div class="error-msg" id="err-login-email"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="login-password">Password</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input id="login-password" name="password" type="password" class="form-control"
+                 placeholder="Enter your password" autocomplete="current-password" required>
+        </div>
+        <div class="error-msg" id="err-login-password"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login">
+        <i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In
+      </button>
+
+      <div class="divider-text">quick demo access</div>
+      <div class="demo-grid">
+        <button type="button" class="demo-btn" onclick="fillDemo('admin','admin123')">
+          <i class="fa-solid fa-shield-halved"></i> Admin Demo
+        </button>
+        <button type="button" class="demo-btn" onclick="fillDemo('student1@gmail.com','student123')">
+          <i class="fa-solid fa-graduation-cap"></i> Student Demo
+        </button>
+      </div>
+    </form>
+
+    <!-- ── REGISTER FORM ───────────────────────────────── -->
+    <form id="register-form" onsubmit="handleRegister(event)" novalidate style="display:none">
+      <div class="form-group">
+        <label class="form-label" for="reg-fullname">Full Name</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-id-card"></i>
+          <input id="reg-fullname" name="full_name" type="text" class="form-control"
+                 placeholder="e.g. Juan Dela Cruz" autocomplete="name" required>
+        </div>
+        <div class="error-msg" id="err-reg-full_name"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-email">Gmail Address</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-envelope"></i>
+          <input id="reg-email" name="email" type="email" class="form-control"
+                 placeholder="e.g. yourname@gmail.com" autocomplete="email" required>
+        </div>
+        <div class="error-msg" id="err-reg-email"></div>
+        <small style="color:var(--text-3); font-size:0.75rem; margin-top:4px; display:block;">Only @gmail.com email addresses are accepted</small>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-phone">Phone Number</label>
+        <input id="reg-phone" name="phone" type="tel" class="form-control" autocomplete="tel"
+               placeholder="09xxxxxxxxx or +639xxxxxxxxx" maxlength="16" required>
+        <div class="error-msg" id="err-reg-phone"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-grade">Grade</label>
+        <select id="reg-grade" name="grade" class="form-control" required>
+          <option value="">Select grade</option>
+          {% for grade in range(7, 13) %}
+          <option value="{{ grade }}">Grade {{ grade }}</option>
+          {% endfor %}
+        </select>
+        <div class="error-msg" id="err-reg-grade"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-section">Section</label>
+        <input id="reg-section" name="section" type="text" class="form-control" autocomplete="off"
+               maxlength="100" placeholder="Your current section" required>
+        <div class="error-msg" id="err-reg-section"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-lrn">Learner Reference Number (LRN)</label>
+        <input id="reg-lrn" name="lrn" type="text" class="form-control" inputmode="numeric"
+               autocomplete="off" maxlength="12" pattern="[0-9]{12}" placeholder="12-digit LRN" required>
+        <div class="error-msg" id="err-reg-lrn"></div>
+        <small style="color:var(--text-3); font-size:0.75rem; margin-top:4px; display:block;">Enter the 12-digit LRN shown on your school records.</small>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-student-id">Current School ID Photo</label>
+        <input id="reg-student-id" name="student_id_file" type="file" class="form-control"
+               accept="image/jpeg,image/png,image/webp" required>
+        <div class="error-msg" id="err-reg-student_id_file"></div>
+        <small style="color:var(--text-3); font-size:0.75rem; margin-top:4px; display:block;">PNG, JPG, or WEBP, up to 5 MB. Only administrators can review it; the image is deleted after the decision.</small>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-password">Password</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input id="reg-password" name="password" type="password" class="form-control"
+                 placeholder="At least 8 characters" autocomplete="new-password" required>
+        </div>
+        <div class="error-msg" id="err-reg-password"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="reg-confirm">Confirm Password</label>
+        <div class="input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input id="reg-confirm" name="confirm" type="password" class="form-control"
+                 placeholder="Repeat password" autocomplete="new-password" required>
+        </div>
+        <div class="error-msg" id="err-reg-confirm"></div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-register">
+        <i class="fa-solid fa-user-plus"></i> Create Account
+      </button>
+    </form>
+
+  </div><!-- /auth-card -->
+</div><!-- /auth-page -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  /* ── Toast ───────────────────────────────────────────── */
+  function toast(msg, type = 'success', dur = 3500) {
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation' };
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `<i class="fa-solid ${icons[type] || icons.success}"></i><span>${msg}</span>`;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), dur);
+  }
+
+  /* ── Tab switch ──────────────────────────────────────── */
+  function switchTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('login-form').style.display    = isLogin ? '' : 'none';
+    document.getElementById('register-form').style.display = isLogin ? 'none' : '';
+    document.getElementById('tab-login').classList.toggle('active', isLogin);
+    document.getElementById('tab-register').classList.toggle('active', !isLogin);
+    clearErrors();
+    document.getElementById('auth-error').style.display = 'none';
+    if (!isLogin) document.getElementById('registration-success').style.display = 'none';
+  }
+
+  /* ── Field-level errors ──────────────────────────────── */
+  function clearErrors() {
+    document.querySelectorAll('.error-msg').forEach(el => el.textContent = '');
+    document.querySelectorAll('.form-control').forEach(el => el.classList.remove('is-invalid'));
+  }
+  function showFieldErrors(errors, prefix = '') {
+    for (const [field, msg] of Object.entries(errors)) {
+      const el = document.getElementById(`err-${prefix}${field}`);
+      const inp = document.querySelector(`[name="${field}"]`);
+      if (el)  { el.textContent = msg; }
+      if (inp) { inp.classList.add('is-invalid'); }
+    }
+  }
+  function showBanner(msg) {
+    document.getElementById('auth-error-msg').textContent = msg;
+    document.getElementById('auth-error').style.display = '';
+  }
+
+  /* ── Client-side validation ──────────────────────────── */
+  const GMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+
+  function validateLogin(email, password) {
+    const errors = {};
+    const trimmed = email.trim();
+    if (!trimmed) {
+      errors.email = 'Email address or username is required.';
+    } else if (trimmed.includes('@') && !GMAIL_REGEX.test(trimmed)) {
+      errors.email = 'Only @gmail.com email addresses are accepted.';
+    }
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (password.length < 4) {
+      errors.password = 'Must be at least 4 characters.';
+    }
+    return errors;
+  }
+
+  function validateRegister(data) {
+    const errors = {};
+    const nameRx = /^[a-zA-ZÀ-ÿ\s\-'.]+$/;
+    if (!data.full_name.trim()) {
+      errors.full_name = 'Full name is required.';
+    } else if (!nameRx.test(data.full_name)) {
+      errors.full_name = 'Only letters, spaces, hyphens, and apostrophes allowed.';
+    } else if (data.full_name.trim().length < 2) {
+      errors.full_name = 'Must be at least 2 characters.';
+    }
+
+    const emailTrim = data.email.trim();
+    if (!emailTrim) {
+      errors.email = 'Gmail address is required.';
+    } else if (!GMAIL_REGEX.test(emailTrim)) {
+      errors.email = 'Only @gmail.com email addresses are accepted.';
+    }
+
+    if (!data.password) {
+      errors.password = 'Password is required.';
+    } else if (data.password.length < 8) {
+      errors.password = 'Must be at least 8 characters.';
+    }
+    if (data.password !== data.confirm) {
+      errors.confirm = 'Passwords do not match.';
+    }
+    let phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (phoneDigits.length === 12 && phoneDigits.startsWith('63')) phoneDigits = phoneDigits.slice(2);
+    else if (phoneDigits.length === 11 && phoneDigits.startsWith('0')) phoneDigits = phoneDigits.slice(1);
+    if (!/^9\d{9}$/.test(phoneDigits)) {
+      errors.phone = 'Enter a valid Philippine mobile number.';
+    }
+    if (!/^(?:[7-9]|1[0-2])$/.test(data.grade || '')) {
+      errors.grade = 'Select a grade from 7 through 12.';
+    }
+    if (!(data.section || '').trim()) {
+      errors.section = 'Section is required.';
+    }
+    if (!/^\d{12}$/.test((data.lrn || '').trim())) {
+      errors.lrn = 'Enter the 12-digit Learner Reference Number (LRN).';
+    }
+    if (!data.student_id_file) {
+      errors.student_id_file = 'Upload a photo of your current school ID.';
+    } else if (data.student_id_file.size > 5 * 1024 * 1024) {
+      errors.student_id_file = 'School ID image must be 5 MB or smaller.';
+    }
+    return errors;
+  }
+
+  /* ── Login handler ───────────────────────────────────── */
+  async function handleLogin(e) {
+    e.preventDefault();
+    clearErrors();
+    document.getElementById('auth-error').style.display = 'none';
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errors   = validateLogin(email, password);
+    if (Object.keys(errors).length) { showFieldErrors(errors, 'login-'); return; }
+
+    const btn = document.getElementById('btn-login');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing in…';
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.message || 'Welcome back!', 'success');
+        setTimeout(() => window.location.href = data.redirect || '/', 500);
+      } else {
+        showBanner(data.message || 'Login failed.');
+        if (data.errors) showFieldErrors(data.errors, 'login-');
+      }
+    } catch (err) {
+      showBanner('Network error — please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In';
+    }
+  }
+
+  /* ── Register handler ────────────────────────────────── */
+  async function handleRegister(e) {
+    e.preventDefault();
+    clearErrors();
+    document.getElementById('auth-error').style.display = 'none';
+    const data = {
+      full_name: document.getElementById('reg-fullname').value,
+      email:     document.getElementById('reg-email').value.trim(),
+      phone:     document.getElementById('reg-phone').value.trim(),
+      grade:     document.getElementById('reg-grade').value,
+      section:   document.getElementById('reg-section').value.trim(),
+      lrn:       document.getElementById('reg-lrn').value.trim(),
+      student_id_file: document.getElementById('reg-student-id').files[0],
+      password:  document.getElementById('reg-password').value,
+      confirm:   document.getElementById('reg-confirm').value,
+    };
+    const errors = validateRegister(data);
+    if (Object.keys(errors).length) { showFieldErrors(errors, 'reg-'); return; }
+
+    const btn = document.getElementById('btn-register');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting application…';
+    try {
+      const formData = new FormData();
+      formData.append('full_name', data.full_name);
+      formData.append('email', data.email);
+      formData.append('phone', data.phone);
+      formData.append('grade', data.grade);
+      formData.append('section', data.section);
+      formData.append('lrn', data.lrn);
+      formData.append('password', data.password);
+      formData.append('student_id_file', data.student_id_file);
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+      });
+      const result = await res.json();
+      if (result.success) {
+        document.getElementById('registration-success-msg').textContent = result.message;
+        document.getElementById('registration-success').style.display = 'flex';
+        document.getElementById('login-email').value = data.email;
+        setTimeout(() => switchTab('login'), 900);
+      } else {
+        if (result.errors) showFieldErrors(result.errors, 'reg-');
+        else showBanner(result.message || 'Registration failed.');
+      }
+    } catch (err) {
+      showBanner('Network error — please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Submit for Verification';
+    }
+  }
+
+  /* ── Demo quick fill ─────────────────────────────────── */
+  function fillDemo(identifier, pass) {
+    switchTab('login');
+    document.getElementById('login-email').value = identifier;
+    document.getElementById('login-password').value = pass;
+    document.getElementById('login-email').dispatchEvent(new Event('input'));
+  }
+</script>
+
+</body>
+</html>

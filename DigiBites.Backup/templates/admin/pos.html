@@ -1,0 +1,1148 @@
+{% extends "base.html" %}
+{% block page_title %}POS Terminal{% endblock %}
+{% block topbar_title %}POS Terminal{% endblock %}
+
+{% block content %}
+<div class="pos-layout">
+
+  <!-- ── Left Column: Catalog & Controls ────────────────── -->
+  <div class="pos-main">
+
+    <!-- Dual Canteen Switcher -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div class="canteen-toggle-group" style="margin:0">
+        <button class="canteen-toggle-btn active" id="pos-canteen-all" onclick="selectPosCanteen('', this)">
+          <i class="fa-solid fa-layer-group"></i> All Canteens
+        </button>
+        <button class="canteen-toggle-btn" id="pos-canteen-shs" onclick="selectPosCanteen('SHS', this)">
+          <i class="fa-solid fa-building"></i> SHS Canteen
+        </button>
+        <button class="canteen-toggle-btn" id="pos-canteen-jhs" onclick="selectPosCanteen('JHS', this)">
+          <i class="fa-solid fa-school"></i> JHS Canteen
+        </button>
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+        <i class="fa-solid fa-arrows-rotate" style="color:var(--swatch-honey)"></i>
+        <span>Full Parity with Customer Menu</span>
+      </div>
+    </div>
+
+    <!-- Category Pills Bar (Synchronized with Customer Menu) -->
+    <div class="pos-cat-bar" id="category-pills">
+      <button class="pos-cat-pill active" onclick="selectCategory('all', this)">
+        ALL <span class="pill-count" id="total-items-badge">0</span>
+      </button>
+      <!-- Injected dynamically by JS matching student menu -->
+    </div>
+
+    <!-- Search & Quick Action Toolbar -->
+    <div class="pos-toolbar">
+      <div class="pos-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" class="pos-search-input" id="menu-search-input" 
+               placeholder="Search Menu..." oninput="handleSearch(this.value)">
+      </div>
+      <button class="pos-tool-btn" onclick="openPosItemAdd()" title="Add Food Item" style="background:#fffbeb; color:#b45309; border-color:#fde68a;">
+        <i class="fa-solid fa-plus"></i> <span style="font-size:0.75rem; font-weight:700;">ADD FOOD</span>
+      </button>
+      <button class="pos-tool-btn" onclick="openRecentOrdersModal()" title="Recent POS Orders">
+        <i class="fa-regular fa-clock"></i>
+      </button>
+      <button class="pos-tool-btn" onclick="testPrinter()" title="Cash Drawer / Printer">
+        <i class="fa-solid fa-print"></i>
+      </button>
+      <div style="position:relative">
+        <button class="pos-tool-btn" onclick="toggleSortMenu()">
+          <i class="fa-solid fa-bars-staggered"></i> SORT
+        </button>
+        <div id="sort-dropdown" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:var(--shadow-md); z-index:50; min-width:140px; overflow:hidden;">
+          <button style="width:100%; text-align:left; padding:8px 12px; border:none; background:transparent; font-size:0.8rem; cursor:pointer;" onclick="setSort('default')">Default</button>
+          <button style="width:100%; text-align:left; padding:8px 12px; border:none; background:transparent; font-size:0.8rem; cursor:pointer;" onclick="setSort('price-asc')">Price: Low to High</button>
+          <button style="width:100%; text-align:left; padding:8px 12px; border:none; background:transparent; font-size:0.8rem; cursor:pointer;" onclick="setSort('price-desc')">Price: High to Low</button>
+          <button style="width:100%; text-align:left; padding:8px 12px; border:none; background:transparent; font-size:0.8rem; cursor:pointer;" onclick="setSort('stock-desc')">Stock: Highest</button>
+          <button style="width:100%; text-align:left; padding:8px 12px; border:none; background:transparent; font-size:0.8rem; cursor:pointer;" onclick="setSort('name-asc')">Name: A to Z</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Grid -->
+    <div class="pos-grid" id="pos-product-grid">
+      <div class="loading-box" style="grid-column:1/-1;">
+        <div class="spinner"></div>
+        <p style="margin-top:10px">Loading menu catalog…</p>
+      </div>
+    </div>
+
+  </div><!-- /pos-main -->
+
+
+  <!-- ── Right Column: Order Summary / Cart ─────────────── -->
+  <aside class="pos-sidebar" id="pos-sidebar-drawer">
+    <div class="order-summary-card">
+
+      <!-- Header -->
+      <div class="order-summary-head">
+        <h3>Order Summary</h3>
+        <button class="new-order-btn" onclick="resetOrder()" title="Clear and start new order">
+          <i class="fa-regular fa-file"></i> NEW ORDER
+        </button>
+      </div>
+
+      <!-- Dine-in / Take-out Toggle -->
+      <div class="order-type-tabs">
+        <button class="order-type-tab active" id="tab-dine-in" onclick="setOrderType('Dine-In')">
+          <i class="fa-solid fa-utensils"></i> Dine-In
+        </button>
+        <button class="order-type-tab" id="tab-take-out" onclick="setOrderType('Take-Out')">
+          <i class="fa-solid fa-bag-shopping"></i> Take-Out
+        </button>
+      </div>
+
+      <!-- Customer Reference -->
+      <div style="margin-bottom:12px">
+        <input type="text" id="pos-customer-input" class="form-control" style="font-size:0.82rem; padding:8px 12px"
+               placeholder="Customer Name / Table # (Optional)" value="Walk-in Customer">
+      </div>
+
+      <!-- Scrollable Cart Items Container -->
+      <div class="cart-items-container" id="pos-cart-items">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Calculations Box -->
+      <div class="order-calc">
+        <div class="calc-row">
+          <span>Subtotal</span>
+          <span id="pos-subtotal">₱0.00</span>
+        </div>
+        <div class="calc-row" style="align-items:center;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span>Discount</span>
+            <select id="pos-discount-select" onchange="calculateTotals()" style="font-size:0.75rem; border:1px solid #cbd5e1; border-radius:4px; padding:1px 4px; background:#ffffff;">
+              <option value="0">None (0%)</option>
+              <option value="20">Student (20%)</option>
+              <option value="20_pwd">Senior/PWD (20%)</option>
+              <option value="15">Staff (15%)</option>
+            </select>
+          </div>
+          <span id="pos-discount-amount" style="color:var(--danger)">-₱0.00</span>
+        </div>
+        <div class="calc-row total-row">
+          <span>Total Amount</span>
+          <span id="pos-total-amount">₱0.00</span>
+        </div>
+      </div>
+
+      <!-- Payment Method Selector -->
+      <div style="font-size:0.76rem; font-weight:700; color:#64748b; margin-bottom:6px; text-transform:uppercase;">Payment Method</div>
+      <div class="pay-methods">
+        <button class="pay-method-btn active" id="pay-btn-cash" onclick="setPaymentMethod('Cash')">
+          <i class="fa-solid fa-money-bill-wave"></i> Cash
+        </button>
+        <button class="pay-method-btn" id="pay-btn-gcash" onclick="setPaymentMethod('GCash')">
+          <i class="fa-solid fa-mobile-screen"></i> GCash
+        </button>
+        <button class="pay-method-btn" id="pay-btn-wallet" onclick="setPaymentMethod('Student Wallet')">
+          <i class="fa-solid fa-id-card"></i> Student
+        </button>
+      </div>
+
+      <!-- Cash Tendered Quick Calculator -->
+      <div id="cash-calc-section" style="margin-bottom:12px;">
+        <div class="cash-quick-chips">
+          <button class="cash-chip" onclick="setTendered('exact')">Exact</button>
+          <button class="cash-chip" onclick="setTendered(100)">₱100</button>
+          <button class="cash-chip" onclick="setTendered(200)">₱200</button>
+          <button class="cash-chip" onclick="setTendered(500)">₱500</button>
+          <button class="cash-chip" onclick="setTendered(1000)">₱1,000</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="number" id="cash-tendered-input" class="form-control" style="font-size:0.85rem; padding:8px 10px;"
+                 placeholder="Tendered Amount" oninput="calculateChange()">
+          <div style="font-size:0.8rem; font-weight:700; white-space:nowrap; color:#0f172a;" id="cash-change-label">
+            Change: ₱0.00
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="pos-btn-group">
+        <button class="btn-hold" onclick="holdCurrentOrder()" title="Hold current order for later">
+          <i class="fa-solid fa-pause"></i> Hold
+        </button>
+        <button class="btn-charge" id="btn-charge" onclick="chargeOrder()">
+          <i class="fa-solid fa-cash-register"></i> Charge <span id="btn-charge-amount">₱0.00</span>
+        </button>
+      </div>
+
+    </div><!-- /order-summary-card -->
+  </aside>
+
+</div><!-- /pos-layout -->
+
+
+<!-- ── Printable Receipt Modal ────────────────────────────── -->
+<div id="receipt-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:400; align-items:center; justify-content:center; padding:16px;">
+  <div class="receipt-printable-content" style="background:#ffffff; width:100%; max-width:360px; border-radius:14px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); padding:24px; font-family:'Courier New', monospace; font-size:13px; color:#1e293b;">
+    <div style="text-align:center; border-bottom:1px dashed #cbd5e1; padding-bottom:12px; margin-bottom:12px;">
+      <h3 style="font-family:'Inter', sans-serif; font-weight:800; font-size:1.15rem; color:#0f172a; margin-bottom:2px;">DIGIBITES POS</h3>
+      <p style="font-size:11px; color:#64748b; margin-bottom:4px;">School Canteen System — Main Branch</p>
+      <div style="font-size:11px; font-weight:bold;" id="rec-order-num">ORD-0000</div>
+      <div style="font-size:10px; color:#64748b;" id="rec-date-time">--</div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:11px;">
+      <span>Customer: <strong id="rec-customer">Walk-in</strong></span>
+      <span id="rec-type" style="font-weight:bold;">Dine-In</span>
+    </div>
+
+    <!-- Items table -->
+    <div id="rec-items" style="border-top:1px dashed #cbd5e1; border-bottom:1px dashed #cbd5e1; padding:8px 0; margin:8px 0; max-height:180px; overflow-y:auto;">
+      <!-- Injected -->
+    </div>
+
+    <!-- Totals -->
+    <div style="line-height:1.6; font-size:12px;">
+      <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span id="rec-subtotal">₱0.00</span></div>
+      <div style="display:flex; justify-content:space-between; color:#ef4444;"><span>Discount:</span><span id="rec-discount">-₱0.00</span></div>
+      <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:14px; border-top:1px solid #e2e8f0; padding-top:4px; margin-top:4px;">
+        <span>TOTAL:</span><span id="rec-total">₱0.00</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px;"><span>Payment (<span id="rec-pay-method">Cash</span>):</span><span id="rec-tendered">₱0.00</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Change:</span><span id="rec-change">₱0.00</span></div>
+    </div>
+
+    <div style="text-align:center; margin-top:16px; font-size:10px; color:#94a3b8; border-top:1px dashed #cbd5e1; padding-top:8px;">
+      Thank you for dining with DigiBites!<br>Please present this slip at the pick-up counter.
+    </div>
+
+    <!-- Modal buttons -->
+    <div style="display:flex; gap:8px; margin-top:16px;" class="no-print">
+      <button class="btn btn-secondary btn-block" onclick="window.print()">
+        <i class="fa-solid fa-print"></i> Print
+      </button>
+      <button class="btn btn-primary btn-block" onclick="closeReceiptModal()">
+        <i class="fa-solid fa-check"></i> Next Order
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Recent Orders Modal ────────────────────────────────── -->
+<div id="recent-orders-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:400; align-items:center; justify-content:center; padding:16px;">
+  <div class="card" style="width:100%; max-width:580px; max-height:85vh; display:flex; flex-direction:column;">
+    <div class="card-header">
+      <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent POS Orders</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeRecentOrdersModal()">✕</button>
+    </div>
+    <div style="padding:16px; overflow-y:auto; flex:1;" id="recent-orders-list">
+      <div class="loading-box"><div class="spinner"></div><p style="margin-top:10px">Loading recent tickets…</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Food Modal (POS Quick Edit & Image Upload) ── -->
+<div id="pos-food-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:450; align-items:center; justify-content:center; padding:16px; backdrop-filter:blur(3px);">
+  <div class="card" style="width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 25px -5px rgba(0,0,0,0.25);">
+    <div class="card-header">
+      <h3 id="pos-modal-title"><i class="fa-solid fa-utensils"></i> Edit Food Item</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closePosFoodModal()">✕</button>
+    </div>
+    <form id="pos-food-form" onsubmit="savePosFood(event)" novalidate>
+      <div class="form-grid-2">
+        <!-- Food Image Upload & URL Section -->
+        <div class="form-group" style="grid-column:1/-1; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:14px; margin-bottom:4px;">
+          <label class="form-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span><i class="fa-solid fa-image" style="color:#f59e0b"></i> Food Image</span>
+            <span style="font-size:0.75rem; color:var(--text-3); font-weight:normal;">Upload image or paste link</span>
+          </label>
+          
+          <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+            <!-- Live Preview -->
+            <div id="pos-img-preview-wrap" style="position:relative; width:80px; height:80px; border-radius:12px; overflow:hidden; background:#ffffff; border:2px solid #e2e8f0; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,0.06);">
+              <img id="pos-img-preview" src="" alt="Preview" style="display:none; width:100%; height:100%; object-fit:cover;" onerror="handlePosPreviewError()">
+              <div id="pos-img-placeholder" style="text-align:center; color:#94a3b8; font-size:1.8rem;">🍲</div>
+              <div id="pos-upload-spinner" style="display:none; position:absolute; inset:0; background:rgba(255,255,255,0.9); align-items:center; justify-content:center; flex-direction:column; gap:4px;">
+                <div class="spinner" style="width:20px; height:20px; border-width:2px;"></div>
+                <span style="font-size:9px; font-weight:700; color:#3b82f6;">Uploading…</span>
+              </div>
+            </div>
+
+            <!-- Upload & URL Controls -->
+            <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input type="file" id="pos-image-file" accept="image/png, image/jpeg, image/jpg, image/webp, image/gif" style="display:none;" onchange="uploadPosImageFile(this)">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('pos-image-file').click()" id="pos-btn-upload-trigger">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> Upload Image
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="clearPosProductImage()" id="pos-btn-clear-img" title="Clear image">
+                  <i class="fa-solid fa-trash-can"></i> Clear
+                </button>
+              </div>
+
+              <div>
+                <input class="form-control" id="pos-image-url" type="text" placeholder="Or paste image URL (https://... or /static/uploads/...)" 
+                       style="font-size:0.8rem; padding:6px 10px;" oninput="onPosImageUrlInput(this.value)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Food Name *</label>
+          <input class="form-control" id="pos-p-name" type="text" placeholder="e.g. Chicken Adobo" required>
+        </div>
+
+        <!-- Ingredients Input -->
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+            <span><i class="fa-solid fa-receipt" style="color:#f59e0b"></i> Ingredients List</span>
+            <span style="font-size:0.75rem; color:var(--text-3); font-weight:normal;">Connected to Inventory</span>
+          </label>
+          <textarea class="form-control" id="pos-p-ingredients" rows="2" 
+                    placeholder="e.g. Chicken, soy sauce, garlic, cane vinegar, black pepper"
+                    oninput="autoDetectPosAllergens(this.value)"></textarea>
+        </div>
+
+        <!-- Allergen Checklist -->
+        <div class="form-group" style="grid-column:1/-1; background:#fffdf5; border:1px solid #fde68a; border-radius:12px; padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label class="form-label" style="margin-bottom:0; color:#92400e; font-weight:700;">
+              <i class="fa-solid fa-triangle-exclamation" style="color:#d97706;"></i> Allergen Information
+            </label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="autoDetectPosAllergens(document.getElementById('pos-p-ingredients').value)" 
+                    style="font-size:0.72rem; padding:2px 8px; color:#b45309;" title="Auto-detect based on ingredients">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Detect
+            </button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:6px;" id="pos-allergens-list">
+            <!-- Injected by initPosAllergenCheckboxes() -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Price (₱) *</label>
+          <input class="form-control" id="pos-p-price" type="number" step="0.50" min="1" placeholder="0.00" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stock Quantity</label>
+          <input class="form-control" id="pos-p-stock" type="number" min="0" placeholder="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-control" id="pos-p-category">
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+            <option value="Snacks">Snacks</option>
+            <option value="Beverages">Beverages</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Canteen Location</label>
+          <select class="form-control" id="pos-p-canteen">
+            <option value="SHS">Senior High School (SHS) Canteen</option>
+            <option value="JHS">Junior High School (JHS) Canteen</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="pos-p-status">
+            <option>Available</option><option>Sold Out</option><option>Unavailable</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Emoji Icon</label>
+          <input class="form-control" id="pos-p-emoji" type="text" placeholder="🍲" maxlength="4" value="🍲">
+        </div>
+      </div>
+      <input type="hidden" id="pos-p-id" value="">
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="pos-modal-save" style="margin-top:14px">
+        <i class="fa-solid fa-floppy-disk"></i> Save Product
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── State ──────────────────────────────────────────────── */
+let allProducts        = [];
+let officialCategories = [];
+let currentCategory    = 'all';
+let currentCanteen     = '';
+let searchQuery        = '';
+let currentSort        = 'default';
+let posCart            = [];
+let currentOrderType   = 'Dine-In';
+let currentPayment     = 'Cash';
+let heldOrders         = [];
+
+/* ── Init ───────────────────────────────────────────────── */
+async function loadPOS() {
+  try {
+    const [cfgRes, menuRes] = await Promise.all([
+      api('/api/config'),
+      api('/api/menu')
+    ]);
+
+    if (cfgRes && cfgRes.success && cfgRes.data) {
+      officialCategories = (cfgRes.data.categories || []).map(c => c.name || c.code);
+      populatePosCategoryDropdown(officialCategories);
+    }
+
+    if (menuRes && menuRes.success && menuRes.data) {
+      allProducts = menuRes.data;
+      renderCategoryPills();
+      renderProductGrid();
+      renderCart();
+    }
+  } catch (err) {
+    console.error('POS init error:', err);
+  }
+}
+
+function populatePosCategoryDropdown(categories) {
+  const select = document.getElementById('pos-p-category');
+  if (!select || !categories || !categories.length) return;
+  const currentVal = select.value;
+  select.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (currentVal && categories.includes(currentVal)) {
+    select.value = currentVal;
+  }
+}
+
+function selectPosCanteen(canteen, btn) {
+  currentCanteen = canteen;
+  document.querySelectorAll('.canteen-toggle-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderCategoryPills();
+  renderProductGrid();
+}
+
+/* ── Category Filter Pills ──────────────────────────────── */
+function renderCategoryPills() {
+  const dynamicCats = Array.from(new Set(allProducts.map(p => p.category))).filter(Boolean);
+  const categories = Array.from(new Set([...officialCategories, ...dynamicCats])).filter(Boolean);
+  const pillBar = document.getElementById('category-pills');
+
+  const canteenFilteredProducts = currentCanteen
+    ? allProducts.filter(p => (p.canteen === currentCanteen || p.canteen_location === currentCanteen))
+    : allProducts;
+
+  document.getElementById('total-items-badge').textContent = canteenFilteredProducts.length;
+
+  const pillsHtml = categories.map(cat => {
+    const count = canteenFilteredProducts.filter(p => p.category === cat).length;
+    return `
+      <button class="pos-cat-pill ${currentCategory === cat ? 'active' : ''}" onclick="selectCategory('${cat}', this)">
+        ${cat} <span class="pill-count">${count}</span>
+      </button>
+    `;
+  }).join('');
+
+  pillBar.innerHTML = `
+    <button class="pos-cat-pill ${currentCategory === 'all' ? 'active' : ''}" onclick="selectCategory('all', this)">
+      ALL <span class="pill-count">${canteenFilteredProducts.length}</span>
+    </button>
+    ${pillsHtml}
+  `;
+}
+
+function selectCategory(cat, btn) {
+  currentCategory = cat;
+  document.querySelectorAll('.pos-cat-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderProductGrid();
+}
+
+function handleSearch(val) {
+  searchQuery = val.trim().toLowerCase();
+  renderProductGrid();
+}
+
+function toggleSortMenu() {
+  const dd = document.getElementById('sort-dropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function setSort(type) {
+  currentSort = type;
+  document.getElementById('sort-dropdown').style.display = 'none';
+  renderProductGrid();
+}
+
+// Close sort dropdown if clicked outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.pos-toolbar')) {
+    const dd = document.getElementById('sort-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
+/* ── Product Grid ───────────────────────────────────────── */
+function renderProductGrid() {
+  const grid = document.getElementById('pos-product-grid');
+  let filtered = allProducts.filter(p => {
+    const matchCat  = currentCategory === 'all' || p.category === currentCategory;
+    const matchSrch = !searchQuery || p.name.toLowerCase().includes(searchQuery);
+    const itemCanteen = p.canteen || p.canteen_location || '';
+    const matchCanteen = !currentCanteen || itemCanteen === currentCanteen;
+    return matchCat && matchSrch && matchCanteen;
+  });
+
+  // Sorting
+  if (currentSort === 'price-asc')  filtered.sort((a,b) => a.price - b.price);
+  if (currentSort === 'price-desc') filtered.sort((a,b) => b.price - a.price);
+  if (currentSort === 'stock-desc') filtered.sort((a,b) => b.stock_qty - a.stock_qty);
+  if (currentSort === 'name-asc')   filtered.sort((a,b) => a.name.localeCompare(b.name));
+
+  if (!filtered.length) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1;">
+        <div class="empty-icon">🍽️</div>
+        <h4>No matching items</h4>
+        <p>Try searching for a different keyword, category, or canteen section.</p>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(item => {
+    const stock = Number(item.stock_qty || 0);
+    let badgeClass = 'in-stock';
+    let badgeText  = `${stock} left`;
+
+    if (stock <= 0) {
+      badgeClass = 'sold-out';
+      badgeText  = 'Sold Out';
+    } else if (stock <= 10) {
+      badgeClass = 'low-stock';
+      badgeText  = `Low ( ${stock} left )`;
+    }
+
+    const imgUrl = item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80';
+    const isSoldOut = stock <= 0;
+
+    const itemCanteen = item.canteen || item.canteen_location || '';
+    const canteenTag = itemCanteen === 'SHS'
+      ? `<span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:0.65rem;padding:2px 6px;font-weight:700"><i class="fa-solid fa-building"></i> SHS</span>`
+      : (itemCanteen === 'JHS' ? `<span class="badge" style="background:#ecfdf5;color:#065f46;font-size:0.65rem;padding:2px 6px;font-weight:700"><i class="fa-solid fa-school"></i> JHS</span>` : '');
+
+    return `
+      <div class="pos-card" id="card-item-${item.id}">
+        <div class="pos-card-img-wrap">
+          <button class="pos-card-edit-btn" onclick="openPosItemEdit(event, ${item.id})" title="Edit Picture / Food Details">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <img src="${imgUrl}" alt="${item.name}" class="pos-card-img" loading="lazy"
+               onerror="this.src='https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&q=80'">
+          <div class="pos-stock-badge ${badgeClass}">
+            <span class="pos-stock-dot"></span>
+            <span>${badgeText}</span>
+          </div>
+        </div>
+        <div class="pos-card-body">
+          <div class="pos-card-header">
+            <div>
+              <div class="pos-card-title">${item.name}</div>
+              <div style="margin-top:2px">${canteenTag}</div>
+            </div>
+            <div class="pos-card-price">${peso(item.price)}</div>
+          </div>
+          ${(item.allergens && item.allergens.length) ? `
+            <div style="display:flex; flex-wrap:wrap; gap:3px; margin:4px 0;">
+              ${item.allergens.map(al => `<span class="badge badge-amber" style="font-size:0.62rem; padding:1px 5px;"><i class="fa-solid fa-triangle-exclamation"></i> ${al}</span>`).join('')}
+            </div>
+          ` : ''}
+          ${item.ingredients ? `
+            <div style="font-size:0.7rem; color:#64748b; line-height:1.25; margin-bottom:6px; max-height:28px; overflow:hidden; text-overflow:ellipsis;" title="${item.ingredients}">
+              <strong>Ingr:</strong> ${item.ingredients}
+            </div>
+          ` : ''}
+          <button class="pos-add-btn ${isSoldOut ? 'disabled' : ''}" 
+                  ${isSoldOut ? 'disabled' : ''} 
+                  onclick="addToCart(${item.id})">
+            <i class="fa-solid fa-plus"></i> ${isSoldOut ? 'Sold Out' : 'Add to Cart'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ── Cart Logic ─────────────────────────────────────────── */
+function addToCart(id) {
+  const product = allProducts.find(p => p.id === id);
+  if (!product) return;
+
+  const stock = Number(product.stock_qty || 0);
+  const existing = posCart.find(i => i.id === id);
+
+  if (existing) {
+    if (existing.qty >= stock) {
+      toast(`Only ${stock} items available in stock.`, 'warning');
+      return;
+    }
+    existing.qty += 1;
+  } else {
+    if (stock <= 0) {
+      toast('Item is sold out.', 'error');
+      return;
+    }
+    posCart.push({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      canteen: product.canteen || product.canteen_location || '',
+      canteen_location: product.canteen || product.canteen_location || '',
+      emoji: product.emoji || '🍲',
+      image_url: product.image_url || '',
+      stock_qty: stock,
+      qty: 1
+    });
+  }
+
+  renderCart();
+  calculateTotals();
+}
+
+function updateQty(id, delta) {
+  const item = posCart.find(i => i.id === id);
+  if (!item) return;
+
+  const newQty = item.qty + delta;
+  if (newQty <= 0) {
+    removeFromCart(id);
+    return;
+  }
+  if (newQty > item.stock_qty) {
+    toast(`Only ${item.stock_qty} left in stock.`, 'warning');
+    return;
+  }
+  item.qty = newQty;
+  renderCart();
+  calculateTotals();
+}
+
+function removeFromCart(id) {
+  posCart = posCart.filter(i => i.id !== id);
+  renderCart();
+  calculateTotals();
+}
+
+function resetOrder() {
+  posCart = [];
+  document.getElementById('pos-customer-input').value = 'Walk-in Customer';
+  document.getElementById('cash-tendered-input').value = '';
+  document.getElementById('pos-discount-select').value = '0';
+  renderCart();
+  calculateTotals();
+}
+
+function renderCart() {
+  const container = document.getElementById('pos-cart-items');
+  if (!posCart.length) {
+    container.innerHTML = `
+      <div class="cart-empty-box">
+        <i class="fa-solid fa-cart-shopping"></i>
+        <h4>Cart is empty</h4>
+        <p>Add items from the menu</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = posCart.map(item => `
+    <div class="cart-item-row">
+      <img src="${item.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'}" 
+           class="cart-item-thumb" onerror="this.style.display='none'">
+      <div class="cart-item-info">
+        <div class="cart-item-name">${item.name}</div>
+        <div class="cart-item-unit">${peso(item.price)} each</div>
+      </div>
+      <div class="cart-stepper">
+        <button onclick="updateQty(${item.id}, -1)">−</button>
+        <span>${item.qty}</span>
+        <button onclick="updateQty(${item.id}, 1)">+</button>
+      </div>
+      <div class="cart-item-total">${peso(item.price * item.qty)}</div>
+      <button class="cart-item-del" onclick="removeFromCart(${item.id})" title="Remove item">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+/* ── Calculations & Payment ─────────────────────────────── */
+function setOrderType(type) {
+  currentOrderType = type;
+  document.getElementById('tab-dine-in').classList.toggle('active', type === 'Dine-In');
+  document.getElementById('tab-take-out').classList.toggle('active', type === 'Take-Out');
+}
+
+function setPaymentMethod(method) {
+  currentPayment = method;
+  document.getElementById('pay-btn-cash').classList.toggle('active', method === 'Cash');
+  document.getElementById('pay-btn-gcash').classList.toggle('active', method === 'GCash');
+  document.getElementById('pay-btn-wallet').classList.toggle('active', method === 'Student Wallet');
+
+  const cashSec = document.getElementById('cash-calc-section');
+  cashSec.style.display = method === 'Cash' ? 'block' : 'none';
+}
+
+function calculateTotals() {
+  const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const discountVal = document.getElementById('pos-discount-select').value;
+  let discountRate = 0;
+  if (discountVal === '20' || discountVal === '20_pwd') discountRate = 0.20;
+  if (discountVal === '15') discountRate = 0.15;
+
+  const discountAmount = subtotal * discountRate;
+  const total = Math.max(0, subtotal - discountAmount);
+
+  document.getElementById('pos-subtotal').textContent       = peso(subtotal);
+  document.getElementById('pos-discount-amount').textContent = `-${peso(discountAmount)}`;
+  document.getElementById('pos-total-amount').textContent   = peso(total);
+  document.getElementById('btn-charge-amount').textContent  = peso(total);
+
+  calculateChange();
+}
+
+function setTendered(val) {
+  const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const discountVal = document.getElementById('pos-discount-select').value;
+  const discountRate = (discountVal === '20' || discountVal === '20_pwd') ? 0.20 : (discountVal === '15' ? 0.15 : 0);
+  const total = Math.max(0, subtotal - (subtotal * discountRate));
+
+  const input = document.getElementById('cash-tendered-input');
+  if (val === 'exact') {
+    input.value = total.toFixed(2);
+  } else {
+    input.value = Number(val).toFixed(2);
+  }
+  calculateChange();
+}
+
+function calculateChange() {
+  const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const discountVal = document.getElementById('pos-discount-select').value;
+  const discountRate = (discountVal === '20' || discountVal === '20_pwd') ? 0.20 : (discountVal === '15' ? 0.15 : 0);
+  const total = Math.max(0, subtotal - (subtotal * discountRate));
+
+  const tendered = parseFloat(document.getElementById('cash-tendered-input').value) || 0;
+  const change = Math.max(0, tendered - total);
+  const label = document.getElementById('cash-change-label');
+
+  if (tendered > 0 && tendered < total) {
+    label.style.color = '#ef4444';
+    label.textContent = `Short: ₱${(total - tendered).toFixed(2)}`;
+  } else {
+    label.style.color = '#0f172a';
+    label.textContent = `Change: ${peso(change)}`;
+  }
+}
+
+/* ── Charge / Checkout ──────────────────────────────────── */
+async function chargeOrder() {
+  if (!posCart.length) {
+    toast('Cart is empty. Please add items first.', 'warning');
+    return;
+  }
+
+  const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const discountVal = document.getElementById('pos-discount-select').value;
+  const discountRate = (discountVal === '20' || discountVal === '20_pwd') ? 0.20 : (discountVal === '15' ? 0.15 : 0);
+  const discountAmt = subtotal * discountRate;
+  const total = Math.max(0, subtotal - discountAmt);
+
+  const tendered = parseFloat(document.getElementById('cash-tendered-input').value) || total;
+  if (currentPayment === 'Cash' && tendered < total) {
+    toast('Tendered amount is less than total amount.', 'error');
+    return;
+  }
+
+  const customerName = document.getElementById('pos-customer-input').value.trim() || 'Walk-in Customer';
+
+  const assignedCanteen = currentCanteen || (posCart[0] && (posCart[0].canteen || posCart[0].canteen_location)) || 'SHS';
+  const orderPayload = {
+    canteen:          assignedCanteen,
+    canteen_location: assignedCanteen,
+    customer_name:    customerName,
+    student_id:       'walkin_pos',
+    payment_method:   currentPayment,
+    payment_status:   'Paid',
+    order_type:       currentOrderType,
+    items:            posCart.map(i => ({
+      id: i.id,
+      name: i.name,
+      price: i.price,
+      qty: i.qty,
+      emoji: i.emoji,
+      canteen: i.canteen || assignedCanteen,
+      canteen_location: i.canteen_location || assignedCanteen
+    })),
+    total:            total,
+  };
+
+  const btn = document.getElementById('btn-charge');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Charging…';
+
+  try {
+    const res = await api('/api/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderPayload)
+    });
+
+    if (res.success) {
+      toast(`Order charged successfully! ${res.data ? res.data.order_number : ''}`, 'success');
+
+      // Show receipt modal
+      showReceiptModal({
+        order_number:   res.data ? res.data.order_number : `ORD-${Date.now()}`,
+        date_time:      new Date().toLocaleString('en-US'),
+        customer_name:  customerName,
+        order_type:     currentOrderType,
+        items:          [...posCart],
+        subtotal:       subtotal,
+        discount:       discountAmt,
+        total:          total,
+        payment_method: currentPayment,
+        tendered:       tendered,
+        change:         Math.max(0, tendered - total),
+      });
+
+      // Update in-memory stock
+      posCart.forEach(ci => {
+        const p = allProducts.find(x => x.id === ci.id);
+        if (p) p.stock_qty = Math.max(0, (p.stock_qty || 0) - ci.qty);
+      });
+      renderProductGrid();
+
+      // Reset cart
+      posCart = [];
+      renderCart();
+      calculateTotals();
+    } else {
+      toast(res.message || 'Order charging failed.', 'error');
+    }
+  } catch (err) {
+    toast('Connection error while charging order.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-cash-register"></i> Charge <span id="btn-charge-amount">' + peso(total) + '</span>';
+  }
+}
+
+/* ── Receipt Modal ──────────────────────────────────────── */
+function showReceiptModal(rec) {
+  document.getElementById('rec-order-num').textContent    = rec.order_number;
+  document.getElementById('rec-date-time').textContent    = rec.date_time;
+  document.getElementById('rec-customer').textContent     = rec.customer_name;
+  document.getElementById('rec-type').textContent         = rec.order_type;
+  document.getElementById('rec-subtotal').textContent     = peso(rec.subtotal);
+  document.getElementById('rec-discount').textContent     = `-${peso(rec.discount)}`;
+  document.getElementById('rec-total').textContent        = peso(rec.total);
+  document.getElementById('rec-pay-method').textContent   = rec.payment_method;
+  document.getElementById('rec-tendered').textContent     = peso(rec.tendered);
+  document.getElementById('rec-change').textContent       = peso(rec.change);
+
+  document.getElementById('rec-items').innerHTML = rec.items.map(i => `
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+      <span>${i.name} × ${i.qty}</span>
+      <span>${peso(i.price * i.qty)}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('receipt-modal').style.display = 'flex';
+}
+
+function closeReceiptModal() {
+  document.getElementById('receipt-modal').style.display = 'none';
+  resetOrder();
+}
+
+function testPrinter() {
+  toast('Printer connection active. Cash drawer open signal sent.', 'success');
+}
+
+/* ── Hold Order ─────────────────────────────────────────── */
+function holdCurrentOrder() {
+  if (!posCart.length) {
+    toast('Cannot hold empty cart.', 'warning');
+    return;
+  }
+  const order = {
+    id: Date.now(),
+    customer: document.getElementById('pos-customer-input').value.trim() || 'Walk-in',
+    items: [...posCart],
+    time: new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+  };
+  heldOrders.push(order);
+  toast(`Order for ${order.customer} placed on hold.`, 'info');
+  resetOrder();
+}
+
+/* ── Recent Orders ──────────────────────────────────────── */
+async function openRecentOrdersModal() {
+  document.getElementById('recent-orders-modal').style.display = 'flex';
+  const list = document.getElementById('recent-orders-list');
+  list.innerHTML = '<div class="loading-box"><div class="spinner"></div><p style="margin-top:10px">Loading recent tickets…</p></div>';
+
+  const res = await api('/api/orders?role=admin');
+  if (res.success && res.data) {
+    const orders = res.data.slice(0, 10);
+    if (!orders.length) {
+      list.innerHTML = '<div class="empty-state"><h4>No orders yet today</h4></div>';
+      return;
+    }
+    list.innerHTML = orders.map(o => `
+      <div style="padding:10px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong style="color:#0f172a;">${o.order_number}</strong>
+          <span style="font-size:0.8rem; color:#64748b;"> · ${o.customer_name}</span>
+          <div style="font-size:0.75rem; color:#94a3b8;">${(o.items || []).map(i => `${i.name} ×${i.qty}`).join(', ')}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:bold; color:#0f172a;">${peso(o.total)}</div>
+          <span class="badge ${o.status === 'Completed' ? 'badge-green' : 'badge-amber'}">${o.status}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+function closeRecentOrdersModal() {
+  document.getElementById('recent-orders-modal').style.display = 'none';
+}
+
+/* ── POS Food Add / Edit & Image Upload ───────────────────── */
+function updatePosImagePreview(url) {
+  const img = document.getElementById('pos-img-preview');
+  const ph  = document.getElementById('pos-img-placeholder');
+  if (url && url.trim()) {
+    img.src = url.trim();
+    img.style.display = 'block';
+    ph.style.display = 'none';
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    ph.style.display = 'block';
+  }
+}
+
+function onPosImageUrlInput(url) {
+  updatePosImagePreview(url);
+}
+
+function handlePosPreviewError() {
+  const img = document.getElementById('pos-img-preview');
+  const ph  = document.getElementById('pos-img-placeholder');
+  img.style.display = 'none';
+  ph.style.display = 'block';
+}
+
+function clearPosProductImage() {
+  document.getElementById('pos-image-url').value = '';
+  document.getElementById('pos-image-file').value = '';
+  updatePosImagePreview('');
+}
+
+async function uploadPosImageFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  const spinner = document.getElementById('pos-upload-spinner');
+  const uploadBtn = document.getElementById('pos-btn-upload-trigger');
+  spinner.style.display = 'flex';
+  uploadBtn.disabled = true;
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/menu/upload-image', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success && data.image_url) {
+      document.getElementById('pos-image-url').value = data.image_url;
+      updatePosImagePreview(data.image_url);
+      toast('Image uploaded successfully!', 'success');
+    } else {
+      toast(data.message || 'Image upload failed.', 'error');
+    }
+  } catch (err) {
+    toast('Image upload failed: ' + err.message, 'error');
+  } finally {
+    spinner.style.display = 'none';
+    uploadBtn.disabled = false;
+    input.value = '';
+  }
+}
+
+/* ── POS Allergen Checklist & Detection ── */
+const POS_ALLERGEN_OPTIONS = [
+  { name: 'Peanuts', emoji: '🥜' },
+  { name: 'Tree Nuts', emoji: '🌰' },
+  { name: 'Dairy / Milk', emoji: '🥛' },
+  { name: 'Eggs', emoji: '🥚' },
+  { name: 'Fish', emoji: '🐟' },
+  { name: 'Shellfish', emoji: '🦐' },
+  { name: 'Wheat / Gluten', emoji: '🌾' },
+  { name: 'Soy', emoji: '🫘' },
+  { name: 'Sesame', emoji: '🌱' }
+];
+
+function initPosAllergenCheckboxes() {
+  const container = document.getElementById('pos-allergens-list');
+  if (!container) return;
+  container.innerHTML = POS_ALLERGEN_OPTIONS.map(a => `
+    <label style="display:flex; align-items:center; gap:5px; font-size:0.75rem; color:#1e293b; background:#ffffff; border:1px solid #e2e8f0; padding:4px 6px; border-radius:6px; cursor:pointer;">
+      <input type="checkbox" value="${a.name}" class="pos-allergen-chk" style="accent-color:#d97706; cursor:pointer;">
+      <span>${a.emoji}</span>
+      <span style="font-weight:600;">${a.name}</span>
+    </label>
+  `).join('');
+}
+
+function autoDetectPosAllergens(text) {
+  if (!text) return;
+  const t = text.toLowerCase();
+  
+  const rules = {
+    'Dairy / Milk': ['milk', 'dairy', 'cheese', 'butter', 'cream', 'lactose', 'evaporated', 'condensed', 'tablea'],
+    'Eggs': ['egg', 'mayonnaise', 'pastry', 'custard'],
+    'Wheat / Gluten': ['wheat', 'flour', 'bread', 'pasta', 'noodle', 'macaroni', 'gluten', 'panko', 'crumbs', 'lumpia wrapper', 'wrapper', 'graham'],
+    'Soy': ['soy', 'tofu', 'soya', 'edamame'],
+    'Peanuts': ['peanut', 'groundnut'],
+    'Tree Nuts': ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut'],
+    'Fish': ['fish', 'tuna', 'tilapia', 'salmon', 'patis'],
+    'Shellfish': ['shrimp', 'crab', 'squid', 'oyster', 'prawn', 'clam', 'lobster', 'oyster sauce'],
+    'Sesame': ['sesame', 'tahini']
+  };
+
+  Object.entries(rules).forEach(([allergen, keywords]) => {
+    const matched = keywords.some(k => t.includes(k));
+    const chk = document.querySelector(`.pos-allergen-chk[value="${allergen}"]`);
+    if (chk && matched) {
+      chk.checked = true;
+    }
+  });
+}
+
+function openPosItemAdd() {
+  document.getElementById('pos-modal-title').innerHTML = '<i class="fa-solid fa-plus"></i> Add Food Item';
+  document.getElementById('pos-food-form').reset();
+  document.getElementById('pos-p-id').value = '';
+  document.getElementById('pos-p-emoji').value = '🍲';
+  document.getElementById('pos-p-ingredients').value = '';
+  document.querySelectorAll('.pos-allergen-chk').forEach(c => c.checked = false);
+  clearPosProductImage();
+  document.getElementById('pos-food-modal').style.display = 'flex';
+}
+
+function openPosItemEdit(e, id) {
+  if (e) e.stopPropagation();
+  const item = allProducts.find(p => p.id === id);
+  if (!item) return;
+
+  document.getElementById('pos-modal-title').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Food Item';
+  document.getElementById('pos-p-id').value       = item.id;
+  document.getElementById('pos-p-name').value     = item.name;
+  document.getElementById('pos-p-price').value    = item.price;
+  document.getElementById('pos-p-stock').value    = item.stock_qty;
+  document.getElementById('pos-p-canteen').value  = item.canteen || 'JHS';
+  document.getElementById('pos-p-category').value = item.category || 'Morning';
+  document.getElementById('pos-p-status').value   = item.status || 'Available';
+  document.getElementById('pos-p-emoji').value    = item.emoji || '🍲';
+  
+  document.getElementById('pos-p-ingredients').value = item.ingredients || '';
+  const itemAllergens = Array.isArray(item.allergens) ? item.allergens : [];
+  document.querySelectorAll('.pos-allergen-chk').forEach(c => {
+    c.checked = itemAllergens.includes(c.value);
+  });
+
+  const imgUrl = item.image_url || '';
+  document.getElementById('pos-image-url').value = imgUrl;
+  updatePosImagePreview(imgUrl);
+
+  document.getElementById('pos-food-modal').style.display = 'flex';
+}
+
+function closePosFoodModal() {
+  document.getElementById('pos-food-modal').style.display = 'none';
+}
+
+async function savePosFood(e) {
+  e.preventDefault();
+  const name  = document.getElementById('pos-p-name').value.trim();
+  const price = parseFloat(document.getElementById('pos-p-price').value);
+  if (!name || !price || price <= 0) {
+    toast('Please enter a valid product name and price.', 'warning');
+    return;
+  }
+
+  const selectedAllergens = Array.from(document.querySelectorAll('.pos-allergen-chk:checked')).map(c => c.value);
+
+  const payload = {
+    name,
+    price,
+    stock_qty:   parseInt(document.getElementById('pos-p-stock').value) || 50,
+    canteen:     document.getElementById('pos-p-canteen').value,
+    category:    document.getElementById('pos-p-category').value,
+    status:      document.getElementById('pos-p-status').value,
+    emoji:       document.getElementById('pos-p-emoji').value || '🍲',
+    image_url:   document.getElementById('pos-image-url').value.trim(),
+    ingredients: document.getElementById('pos-p-ingredients').value.trim(),
+    allergens:   selectedAllergens
+  };
+
+  const id  = document.getElementById('pos-p-id').value;
+  const btn = document.getElementById('pos-modal-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+
+  const res = id
+    ? await api(`/api/menu/${id}`, { method:'PUT', body:JSON.stringify(payload) })
+    : await api('/api/menu', { method:'POST', body:JSON.stringify(payload) });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Product';
+
+  if (res.success) {
+    toast(res.message || 'Product saved!', 'success');
+    closePosFoodModal();
+    // Reload menu and re-render grid
+    const freshData = await api('/api/menu');
+    if (freshData.success && freshData.data) {
+      allProducts = freshData.data;
+      renderCategoryPills();
+      renderProductGrid();
+    }
+  } else {
+    toast(res.message || 'Save failed.', 'error');
+  }
+}
+
+// Close modals on backdrop click
+['pos-food-modal', 'recent-orders-modal', 'receipt-modal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('click', function(e) {
+      if (e.target === this) {
+        if (id === 'pos-food-modal') closePosFoodModal();
+        else if (id === 'recent-orders-modal') closeRecentOrdersModal();
+        else if (id === 'receipt-modal') closeReceiptModal();
+      }
+    });
+  }
+});
+
+/* ── Run ────────────────────────────────────────────────── */
+initPosAllergenCheckboxes();
+loadPOS();
+</script>
+{% endblock %}
